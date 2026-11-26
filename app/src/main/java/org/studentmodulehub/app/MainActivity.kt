@@ -56,6 +56,9 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var qualification by remember { mutableStateOf<Qualification?>(null) }
+    var selectedCollege by remember { mutableStateOf<College?>(null) }
+    var colleges by remember { mutableStateOf<List<College>>(emptyList()) }
+    var catalogueSearch by remember { mutableStateOf("") }
     var qualifications by remember { mutableStateOf<List<Qualification>>(emptyList()) }
     var modules by remember { mutableStateOf<List<Module>>(emptyList()) }
     var documents by remember { mutableStateOf<List<Document>>(emptyList()) }
@@ -91,9 +94,14 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
         scope.launch { try { action() } catch (e: Exception) { message = errorMessage(e) } finally { busy = false } }
     }
     fun openQualifications() {
-        go("qualifications"); qualifications = emptyList()
-        if (demo) qualifications = listOf(Qualification("sample", "Diploma in Business Studies", "Sample qualification for navigation testing.", true))
-        else run { qualifications = backend.qualifications() }
+        go("colleges"); catalogueSearch = ""; colleges = emptyList()
+        if (demo) colleges = listOf(College("SAMPLE", "Sample College"))
+        else run { colleges = backend.colleges() }
+    }
+    fun openCollege(college: College) {
+        selectedCollege = college; go("qualifications"); catalogueSearch = ""; qualifications = emptyList()
+        if (demo) qualifications = listOf(Qualification("sample", "Diploma in Business Studies", "Sample qualification for navigation testing.", true, college.id))
+        else run { qualifications = backend.qualifications(college.id) }
     }
     fun openModules(q: Qualification) {
         qualification = q; go("modules"); modules = emptyList()
@@ -209,16 +217,30 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     if (!demo && profile?.role == "admin") HubCard("Administrator", "Access the administration foundation.", "Open dashboard", { go("admin") })
                     Text("Documents are listed where published. Downloads will be added later.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
-                "qualifications" -> {
-                    PageHeader("Qualifications", "Select a qualification to view its modules.")
-                    if (!busy && qualifications.isEmpty()) Text("No qualifications are available yet.")
-                    qualifications.forEach { q -> HubCard(q.title + if (!q.published) " · Draft" else "", q.description, "View modules") { openModules(q) } }
+                "colleges" -> {
+                    PageHeader("UNISA colleges", "Choose a college to browse its qualifications.")
+                    OutlinedTextField(value=catalogueSearch, onValueChange={ catalogueSearch=it }, label={ Text("Search colleges") }, modifier=Modifier.fillMaxWidth(), singleLine=true)
+                    val visibleColleges = colleges.filter { it.name.contains(catalogueSearch, ignoreCase=true) || it.id.contains(catalogueSearch, ignoreCase=true) }
+                    if (!busy && visibleColleges.isEmpty()) Text("No colleges found.")
+                    visibleColleges.forEach { college -> HubCard(college.name, "Browse qualifications offered by this college.", "View qualifications") { openCollege(college) } }
                     OutlinedButton(onClick = { go("home") }) { Text("Back to dashboard") }
+                }
+                "qualifications" -> {
+                    PageHeader(selectedCollege?.name ?: "Qualifications", "Select a qualification to view its modules.")
+                    OutlinedTextField(value=catalogueSearch, onValueChange={ catalogueSearch=it }, label={ Text("Search qualifications or code") }, modifier=Modifier.fillMaxWidth(), singleLine=true)
+                    val visibleQualifications = qualifications.filter { it.title.contains(catalogueSearch, ignoreCase=true) || it.qualificationCode.contains(catalogueSearch, ignoreCase=true) }
+                    if (!busy && visibleQualifications.isEmpty()) Text("No qualifications found for this college.")
+                    visibleQualifications.forEach { q ->
+                        val details = listOf(q.qualificationCode, q.level, q.description).filter { it.isNotBlank() }.joinToString(" · ")
+                        HubCard(q.title + if (!q.published) " · Draft" else "", details, "View modules") { openModules(q) }
+                    }
+                    OutlinedButton(onClick = { go("colleges") }) { Text("Back to colleges") }
                 }
                 "modules" -> {
                     PageHeader(qualification?.title ?: "Modules", "Modules in this qualification")
                     if (!busy && modules.isEmpty()) Text("No modules are available yet.")
-                    modules.forEach { m -> HubCard(m.title + if (!m.published) " · Draft" else "", listOf(m.code, m.description).filter { it.isNotBlank() }.joinToString(" · "), "View module") { selectedModule = m; go("moduleDetail"); documents = emptyList(); if (!demo) run { documents = backend.documents(m.id) } } }
+                    OutlinedTextField(value=catalogueSearch, onValueChange={ catalogueSearch=it }, label={ Text("Search modules or module code") }, modifier=Modifier.fillMaxWidth(), singleLine=true)
+                    modules.filter { it.title.contains(catalogueSearch, ignoreCase=true) || it.code.contains(catalogueSearch, ignoreCase=true) }.forEach { m -> HubCard(m.title + if (!m.published) " · Draft" else "", listOf(m.code, m.description).filter { it.isNotBlank() }.joinToString(" · "), "View module") { selectedModule = m; go("moduleDetail"); documents = emptyList(); if (!demo) run { documents = backend.documents(m.id) } } }
                     OutlinedButton(onClick = { go("qualifications") }) { Text("Back to qualifications") }
                 }
                 "moduleDetail" -> {
@@ -226,7 +248,13 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     Text(selectedModule?.description.orEmpty())
                     Text("Published documents", style = MaterialTheme.typography.titleLarge)
                     if (!busy && documents.isEmpty()) Text("No documents are available yet.")
-                    documents.forEach { doc -> Card(modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(doc.title, style=MaterialTheme.typography.titleMedium); Text(doc.description); if (!doc.published) Text("Draft"); Text("File access is not connected yet.", style=MaterialTheme.typography.bodySmall) } } }
+                    MaterialCategories.forEach { category ->
+                        val items = documents.filter { it.category == category }
+                        if (items.isNotEmpty()) {
+                            Text(category, style=MaterialTheme.typography.titleMedium, color=Teal)
+                            items.forEach { doc -> Card(modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(doc.title, style=MaterialTheme.typography.titleMedium); if (doc.description.isNotBlank()) Text(doc.description); Text("Material file access is not yet available in the student view.", style=MaterialTheme.typography.bodySmall, color=Color.Gray) } } }
+                        }
+                    }
                     OutlinedButton(onClick = { go("modules") }) { Text("Back to modules") }
                 }
                 "profile" -> {
