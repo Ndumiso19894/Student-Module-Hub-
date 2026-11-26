@@ -124,3 +124,14 @@ Imported and committed as `backend/seeds/unisa_verified_module_curricula_2026_ba
 The live database now contains **407 module rows**, of which **406 are curriculum-linked across twelve qualifications/streams**; one earlier module row is pre-existing test data. The batch 4 import adds 61 records. Duplicate qualification/module-code key check remains zero. Semester is blank where the curriculum page does not specify the module period.
 
 Source: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Arts-in-Police-Science-%2898683%29
+
+
+## Additional verified 2026 curriculum — batch 5
+
+Imported and committed as `backend/seeds/unisa_verified_module_curricula_2026_batch_5.sql`:
+
+- **Bachelor of Commerce in Business Management (98310-BSM): 39 module options** across NQF levels 5–7. The seed includes the compulsory modules and all five-elective choices, preserving prerequisite and co-requisite notes.
+
+The live database now contains **446 module rows**, of which **445 are curriculum-linked across thirteen qualifications/streams**; one earlier module row is pre-existing test data. The batch 5 import adds 39 records. Credits and semester periods are left blank where not specified in the curriculum page. Duplicate qualification/module-code key check is being rechecked after this import.
+
+Source: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Commerce-in-Business-Management-%2898310-%E2%80%93-BSM%29
