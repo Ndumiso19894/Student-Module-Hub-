@@ -9,6 +9,19 @@ Native Kotlin + Jetpack Compose + Material 3 app, based on the Stage 3 project. 
 - Applied Stage 4 migration prevents cascading deletion of modules/documents when a parent is deleted. Delete dependents explicitly first.
 - Student suspension, account editing and role management are deliberately not implemented in the app. This also prevents admins accidentally demoting their own account through the app. Student list does not expose email addresses from auth.users.
 
+## Google sign-in setup
+
+The app now includes a **Continue with Google** option on the welcome, sign-in and registration screens. It uses Supabase's Google OAuth flow and returns to the app through `org.studentmodulehub.app://auth/google`. A Google account signing in for the first time is created through Supabase Auth; the existing database signup trigger should create its student profile.
+
+Before Google sign-in can work:
+1. In Google Cloud Console, create an OAuth 2.0 Client ID of type **Web application**.
+2. In its **Authorized redirect URIs**, add the Supabase Auth callback URL shown on the Supabase Dashboard under Authentication → Sign In / Providers → Google. For this project it follows the form `https://<project-ref>.supabase.co/auth/v1/callback`.
+3. In Supabase Dashboard → Authentication → Sign In / Providers → Google, enable Google and enter the Web Client ID and Client Secret from Google Cloud.
+4. In Supabase Dashboard → Authentication → URL Configuration → Redirect URLs, add exactly `org.studentmodulehub.app://auth/google`. Keep the existing email confirmation and recovery redirect URLs too.
+5. Save the settings and test on an installed Android build. Do not put the Google Client Secret in the Android app, Gradle properties committed to GitHub, or any public repository.
+
+This implementation opens Google's OAuth consent flow in the browser; it does not use the separate native Credential Manager button flow. Google sign-in has been added to source but is not yet build-verified or tested against the live provider.
+
 ## Verification results
 - The original Stage 4 baseline passed `testDebugUnitTest assembleDebug` before the latest authentication changes. The current revision contains nine unit tests for authentication form validation; these new tests have not yet been run because the uploaded repository is still missing `gradle/wrapper/gradle-wrapper.jar`.
 - The current authentication UI changes have not yet been built or tested on a physical Android device.
