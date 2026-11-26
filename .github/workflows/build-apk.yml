@@ -36,13 +36,30 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Run unit tests and build debug APK
-        run: gradle testDebugUnitTest assembleDebug --no-daemon --stacktrace
+      - name: Decode persistent Android signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/student-module-hub-release.jks"
+          test -s "$RUNNER_TEMP/student-module-hub-release.jks"
 
-      - name: Upload debug APK
+      - name: Run unit tests and build signed release APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/student-module-hub-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          gradle testDebugUnitTest assembleRelease --no-daemon --stacktrace
+
+      - name: Upload signed release APK
         uses: actions/upload-artifact@v4
         with:
-          name: Student-Module-Hub-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: Student-Module-Hub-release-apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
