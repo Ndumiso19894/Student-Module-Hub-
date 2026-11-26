@@ -63,12 +63,12 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
             Text("The server checks this Drive folder and nested folders every 5 minutes, even when the app is closed. It identifies PDFs from their contents and uses Google Drive indexed OCR for scanned PDFs. High-confidence matches are added as unpublished materials; uncertain matches need review. Non-PDF files are inventoried but are not yet importable.")
             Button(enabled=!busy, onClick={
                 job {
-                    val result = backend.scanDriveMaterials(8)
+                    val result = backend.scanDriveMaterials(20)
                     scanSummary = "Scanned ${result.optInt("scanned")} new PDFs. ${result.optInt("remaining_unscanned")} remain. Found ${result.optInt("total_files_found")} files across ${result.optInt("folders_scanned")} folders; ${result.optInt("non_pdf_files")} non-PDF files are inventoried but not yet importable."
                     importCandidates = backend.driveImportQueue()
                     notice = scanSummary
                 }
-            }) { Text("Scan Drive now (up to 8 PDFs)") }
+            }) { Text("Scan Drive now (up to 20 PDFs)") }
             OutlinedButton(enabled=!busy, onClick={ job { importCandidates = backend.driveImportQueue() } }) { Text("Refresh review queue") }
             if (scanSummary.isNotBlank()) Text(scanSummary, style=MaterialTheme.typography.bodyMedium)
             if (!busy && importCandidates.isEmpty()) Text("No scanned documents in the review queue yet.")
