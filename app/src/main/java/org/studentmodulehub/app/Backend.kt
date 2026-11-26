@@ -128,7 +128,7 @@ class Backend(context: Context) {
             val item = rows.getJSONObject(index)
             val module = item.optJSONObject("module")
             DriveImportCandidate(
-                item.getString("id"), item.optString("file_name"), item.optString("suggested_module_id"),
+                item.getString("id"), item.optString("file_name"), item.optString("suggested_title"), item.optString("suggested_module_id"),
                 module?.optString("title").orEmpty(), module?.optString("code").orEmpty(),
                 item.optString("suggested_category", "Other Study Materials"),
                 item.optDouble("confidence", 0.0), item.optString("status"),
@@ -137,9 +137,9 @@ class Backend(context: Context) {
         }
     }
 
-    suspend fun approveDriveCandidate(candidateId: String, moduleId: String, category: String) {
+    suspend fun approveDriveCandidate(candidateId: String, moduleId: String, category: String, title: String) {
         val result = importerRequest(org.json.JSONObject().put("action", "approve")
-            .put("candidate_id", candidateId).put("module_id", moduleId).put("category", category))
+            .put("candidate_id", candidateId).put("module_id", moduleId).put("category", category).put("title", title))
         check(result.optBoolean("imported")) { "The PDF could not be imported." }
     }
 
@@ -321,6 +321,6 @@ private class SessionVault(context: Context) {
     fun clear() { prefs.edit().clear().commit() }
 }
 data class DriveImportCandidate(
-    val id: String, val fileName: String, val suggestedModuleId: String, val moduleTitle: String,
+    val id: String, val fileName: String, val suggestedTitle: String, val suggestedModuleId: String, val moduleTitle: String,
     val moduleCode: String, val category: String, val confidence: Double, val status: String, val evidence: String
 )
