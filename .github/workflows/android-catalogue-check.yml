@@ -1,10 +1,13 @@
 name: Android catalogue build check
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - "app/**"
+      - "README.md"
+      - "README.md"
       - "backend/migrations/**"
       - ".github/workflows/android-catalogue-check.yml"
       - "build.gradle.kts"
