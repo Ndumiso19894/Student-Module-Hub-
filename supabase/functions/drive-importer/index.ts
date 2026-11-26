@@ -230,13 +230,13 @@ function inferTitle(text: string, fileName: string, moduleTitle = ""): string {
 
 function inferCategoryFromFilename(fileName: string): string | null {
   const name = fileName.toLowerCase().replace(/[_-]+/g, " ");
-  if (/\\b(tutorial letter|tutorial letters|tl\\s*0?1)\\b/.test(name)) return "Tutorial Letters";
-  if (/\\b(assignment|assessment)\\b/.test(name)) return "Assignment Questions";
-  if (/\\b(memorandum|memoranda|marking guideline|marking guidelines)\\b/.test(name)) return "Examination Memorandums";
-  if (/\\b(examination paper|exam paper|exam questions|examination questions)\\b/.test(name)) return "Examination Question Papers";
-  if (/\\b(study guide|learning guide)\\b/.test(name)) return "Study Guides";
-  if (/\\b(textbook|text book|prescribed book)\\b/.test(name)) return "Prescribed Books";
-  if (/\\b(lecture notes|lecture note|class notes)\\b/.test(name)) return "Lecture Notes";
+  if (/\b(tutorial letter|tutorial letters|tl\s*0?1)\b/.test(name)) return "Tutorial Letters";
+  if (/\b(assignment|assessment)\b/.test(name)) return "Assignment Questions";
+  if (/\b(memorandum|memoranda|marking guideline|marking guidelines)\b/.test(name)) return "Examination Memorandums";
+  if (/\b(examination paper|exam paper|exam questions|examination questions)\b/.test(name)) return "Examination Question Papers";
+  if (/\b(study guide|learning guide)\b/.test(name)) return "Study Guides";
+  if (/\b(textbook|text book|prescribed book)\b/.test(name)) return "Prescribed Books";
+  if (/\b(lecture notes|lecture note|class notes)\b/.test(name)) return "Lecture Notes";
   return null;
 }
 
