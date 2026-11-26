@@ -280,6 +280,7 @@ Deno.serve(async (req) => {
       const results: any[] = [];
       for (const file of batch) {
         let extracted = "";
+        let frontMatter = "";
         let pageCount = 0;
         let indexedSearchUsed = false;
         let parseError = "";
@@ -287,7 +288,7 @@ Deno.serve(async (req) => {
           const parsed = await extractPdfText(token, file.id);
           extracted = parsed.text;
           pageCount = parsed.pages;
-          var frontMatter = parsed.frontMatter;
+          frontMatter = parsed.frontMatter;
         } catch (error) {
           parseError = error instanceof Error ? error.message : "PDF text extraction failed.";
         }
