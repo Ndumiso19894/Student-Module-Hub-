@@ -99,3 +99,17 @@ Sources for batch 2:
 - Higher Certificate in Criminal Justice: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Higher-Certificate-in-Criminal-Justice-%2890006%29
 - Diploma in Security Management: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Diploma-in-Security-Management-%2898221%29
 - BA in Criminology: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Arts-in-Criminology-%2898681%29
+
+
+## Additional verified 2026 curricula — batch 3
+
+Imported into live Supabase and committed as `backend/seeds/unisa_verified_module_curricula_2026_batch_3.sql`:
+
+- **Bachelor of Arts in Forensic Science and Technology (90002): 46 module options** across NQF levels 5–7, with the official Law, Management and Criminology elective routes and listed prerequisites/co-requisites retained.
+- **Higher Certificate in Accounting Sciences (98201): 10 compulsory modules** at NQF level 5.
+
+The live database now contains **346 module rows**, of which **345 are curriculum-linked** across eleven qualifications/streams; one earlier module row is pre-existing test data. The batch 3 import adds 56 module records. Duplicate qualification/module-code key check remains zero. All 2026 curriculum source URLs are stored on their module rows. Semester is left blank where the qualification curriculum page does not specify it.
+
+Sources:
+- BA Forensic Science and Technology: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Arts-in-Forensic-Science-and-Technology-%2890002%29
+- Higher Certificate in Accounting Sciences: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Higher-Certificate-in-Accounting-Sciences-%2898201%29
