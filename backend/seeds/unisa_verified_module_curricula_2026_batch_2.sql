@@ -108,5 +108,5 @@ with incoming(qualification_id,title,code,description,published,credits,nqf_leve
 ((select id from public.qualifications where college_id='CLAW' and qualification_code='98681' order by academic_year desc limit 1),'Community Psychology: Working for Change','PYC3716','2026 curriculum — Level 7 Group D — Psychology; choose ONE group B, C or D; Pre-requisite: PYC2614',true,12,7,'',2026,'https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Arts-in-Criminology-%2898681%29')
 )
 insert into public.modules(qualification_id,title,code,description,published,credits,nqf_level,semester,academic_year,official_url)
-select qualification_id,title,code,description,published,credits,nqf_level,nullif(semester,''),academic_year,official_url from incoming
+select qualification_id,title,code,description,published,credits,nqf_level,semester,academic_year,official_url from incoming
 where qualification_id is not null and not exists(select 1 from public.modules m where m.qualification_id=incoming.qualification_id and m.code=incoming.code);
