@@ -117,11 +117,12 @@ class Backend(context: Context) {
         check(response.optBoolean("linked")) { "The PDF could not be linked." }
     }
 
-    suspend fun downloadMaterial(documentId: String): ByteArray {
+    suspend fun downloadMaterial(documentId: String, destination: java.io.File) {
         require(documentId.matches(Regex("[0-9a-fA-F-]{36}")))
         val accessToken = client.auth.currentSessionOrNull()?.accessToken
             ?: throw java.io.IOException("Your session has expired. Sign in again.")
-        return withContext(kotlinx.coroutines.Dispatchers.IO) {
+        withContext(kotlinx.coroutines.Dispatchers.IO) {
+            destination.parentFile?.mkdirs()
             val connection = java.net.URL("${BuildConfig.SUPABASE_URL}/functions/v1/drive-materials")
                 .openConnection() as java.net.HttpURLConnection
             try {
@@ -143,7 +144,13 @@ class Backend(context: Context) {
                 check(connection.contentType?.contains("application/pdf", ignoreCase = true) == true) {
                     "The materials service did not return a PDF."
                 }
-                connection.inputStream.use { it.readBytes() }.also { check(it.isNotEmpty()) { "The PDF is empty." } }
+                connection.inputStream.use { input ->
+                    destination.outputStream().buffered().use { output -> input.copyTo(output) }
+                }
+                check(destination.exists() && destination.length() > 0L) { "The PDF is empty." }
+            } catch (e: Exception) {
+                destination.delete()
+                throw e
             } finally {
                 connection.disconnect()
             }
