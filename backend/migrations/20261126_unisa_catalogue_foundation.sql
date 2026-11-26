@@ -6,13 +6,13 @@ create table if not exists public.colleges (
   created_at timestamptz not null default now()
 );
 insert into public.colleges(id,name,official_url) values
-('CAS','College of Accounting Sciences','https://www.unisa.ac.za/'),
-('CAES','College of Agriculture and Environmental Sciences','https://www.unisa.ac.za/'),
-('CEMS','College of Economic and Management Sciences','https://www.unisa.ac.za/'),
-('CEDU','College of Education','https://www.unisa.ac.za/'),
-('CHS','College of Human Sciences','https://www.unisa.ac.za/'),
-('CLAW','College of Law','https://www.unisa.ac.za/'),
-('CSET','College of Science, Engineering and Technology','https://www.unisa.ac.za/'),
+('CAS','College of Accounting Sciences','https://www.unisa.ac.za/sites/corporate/default/Colleges/Accounting-Sciences/Qualifications'),
+('CAES','College of Agriculture and Environmental Sciences','https://www.unisa.ac.za/sites/corporate/default/Colleges/Agriculture-%26-Environmental-Sciences/Qualifications'),
+('CEMS','College of Economic and Management Sciences','https://www.unisa.ac.za/sites/corporate/default/Colleges/Economic-and-Management-Sciences/Qualifications'),
+('CEDU','College of Education','https://www.unisa.ac.za/sites/corporate/default/Colleges/Education/Qualifications'),
+('CHS','College of Human Sciences','https://www.unisa.ac.za/sites/corporate/default/Colleges/Human-Sciences/Qualifications'),
+('CLAW','College of Law','https://www.unisa.ac.za/sites/corporate/default/Colleges/Law/Qualifications'),
+('CSET','College of Science, Engineering and Technology','https://www.unisa.ac.za/sites/corporate/default/Colleges/Science%2C-Engineering-%26-Technology/Qualifications'),
 ('GSBL','Graduate School of Business Leadership','https://www.unisa.ac.za/')
 on conflict (id) do update set name=excluded.name, official_url=excluded.official_url;
 
