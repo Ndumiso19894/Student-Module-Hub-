@@ -41,11 +41,12 @@ class Backend(context: Context) {
         client.auth.signInWith(Email) { this.email = normalizeEmail(email); this.password = password }
         return profileInternal()
     }
-    suspend fun register(name: String, email: String, password: String) {
+    suspend fun register(name: String, email: String, password: String): Profile? {
         client.auth.signUpWith(Email, redirectUrl = "org.studentmodulehub.app://auth/confirm") {
             this.email = normalizeEmail(email); this.password = password
             data = buildJsonObject { put("display_name", name.trim()) }
         }
+        return if (client.auth.currentSessionOrNull() != null) profileInternal() else null
     }
     suspend fun recover(email: String) {
         client.auth.resetPasswordForEmail(normalizeEmail(email), "org.studentmodulehub.app://auth/recovery")
