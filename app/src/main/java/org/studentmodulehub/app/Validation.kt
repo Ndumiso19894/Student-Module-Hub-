@@ -3,6 +3,8 @@ package org.studentmodulehub.app
 internal object Validation {
     private val emailPattern = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
 
+    fun email(value: String): Boolean = value.trim().matches(emailPattern)
+
     fun auth(
         name: String,
         email: String,
@@ -12,7 +14,7 @@ internal object Validation {
     ): String = when {
         registration && (name.isBlank() || name.trim().length > 120) ->
             "Enter your name (up to 120 characters)."
-        email.isBlank() || !email.trim().matches(emailPattern) ->
+        !email(email) ->
             "Enter a valid email address."
         password.isBlank() ->
             "Enter your password."
