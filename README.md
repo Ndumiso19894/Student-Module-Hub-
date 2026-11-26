@@ -2,18 +2,9 @@
 
 Native Kotlin + Jetpack Compose + Material 3 app, based on the Stage 3 project. The app uses the documented, community-maintained Supabase Kotlin client with a public project URL/publishable key. No secret key or service-role credential is included. Authentication, encrypted session storage and PKCE recovery code from Stage 3 are retained but have not been re-verified on a device in this stage.
 
-## Stage 5 — PDF study materials
-
-- Admins can attach or replace PDF files on existing document records from the Android document picker.
-- Students can download attached PDFs using Android's save-file picker.
-- Files are stored in the private `study-materials` bucket; the app never uses public file URLs.
-- Uploads are limited to PDF files up to 25 MiB. Storage access is controlled by Supabase Storage RLS: admins manage files; students can read only files linked to published documents under published modules and qualifications.
-- Before using these features, run `backend/migrations/20261126_stage5_private_pdf_storage.sql` once in the Supabase SQL Editor as project owner. This adds `documents.storage_path`, creates the private bucket and installs the Storage policies. Do not make the bucket public.
-- Upload a document's metadata first, then use **Upload PDF** beside that document in Administrator → Qualifications & modules → module → Documents. Publish the document and its parent module and qualification before students can download it.
-
 ## What is implemented
-- Student profile and live qualification → module → document browsing, including private PDF downloads when files are attached and all parent records are published.
-- Admin dashboard: read-only list of profiles (name, ID, role and creation date); create/edit/publish/unpublish qualifications, modules and document metadata; assign modules to qualifications, documents to modules; upload/replace PDF files; delete with confirmation.
+- Student profile and live qualification → module → document-metadata browsing, with empty states. Actual PDFs are not connected.
+- Admin dashboard: read-only list of profiles (name, ID, role and creation date); create/edit/publish/unpublish qualifications, modules and document metadata; assign modules to qualifications, documents to modules; delete with confirmation.
 - SQL row-level security from Stage 3 restricts reads to published records and published parents for students, with admin access to catalogue management. Public signup trigger creates a `student` profile; clients cannot update `role`.
 - Applied Stage 4 migration prevents cascading deletion of modules/documents when a parent is deleted. Delete dependents explicitly first.
 - Student suspension, account editing and role management are deliberately not implemented in the app. This also prevents admins accidentally demoting their own account through the app. Student list does not expose email addresses from auth.users.
