@@ -154,6 +154,6 @@ Added the qualification record and imported the following curriculum, committed 
 
 - **Bachelor of Commerce Honours in Business Informatics (98450): 15 module options**. The two compulsory modules, two-of-five information systems options and two-of-seven business/elective options are represented separately, with the research report prerequisite retained.
 
-The live database now contains **494 module rows**, of which **493 are curriculum-linked across fifteen qualifications/streams**; one earlier module row is pre-existing test data. The qualification catalogue now has **341 records**. Credits and semester periods are blank where the official page does not provide per-module values.
+The live database now contains **494 module rows**, of which **493 are curriculum-linked across fifteen qualifications/streams**; one earlier module row is pre-existing test data. The qualification table now has **342 rows**: 341 linked to one of the eight colleges and one earlier unlinked test row. Credits and semester periods are blank where the official page does not provide per-module values.
 
 Source: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Commerce-Honours-in-Business-Informatics-%2898450%29
