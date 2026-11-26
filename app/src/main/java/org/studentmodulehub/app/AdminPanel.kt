@@ -19,6 +19,9 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
     var ds by remember { mutableStateOf<List<Document>>(emptyList()) }
     var students by remember { mutableStateOf<List<StudentAccount>>(emptyList()) }
     var driveFiles by remember { mutableStateOf<List<DrivePdf>>(emptyList()) }
+    var importCandidates by remember { mutableStateOf<List<DriveImportCandidate>>(emptyList()) }
+    var importModules by remember { mutableStateOf<List<Module>>(emptyList()) }
+    var scanSummary by remember { mutableStateOf("") }
     var linkingDocument by remember { mutableStateOf<Document?>(null) }
     var q by remember { mutableStateOf<Qualification?>(null) }
     var m by remember { mutableStateOf<Module?>(null) }
@@ -51,8 +54,72 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
     when(section) {
         "menu" -> {
             HubCard("Students", "View registered profiles and roles.", "View students") { section="students"; job { students = backend.students() } }
+            HubCard("Drive auto-importer", "Scan PDF contents, identify UNISA modules and review suggested matches.", "Open importer") { section="importer"; job { importModules = backend.allModules(); importCandidates = backend.driveImportQueue() } }
             HubCard("Qualifications & modules", "Create and maintain the catalogue and document metadata.", "Manage catalogue") { loadQualifications() }
             OutlinedButton(onClick=onExit) { Text("Back to dashboard") }
+        }
+        "importer" -> {
+            Text("Google Drive · Automatic material identification", style=MaterialTheme.typography.titleLarge)
+            Text("The server checks this Drive folder and nested folders every 5 minutes, even when the app is closed. It identifies PDFs from their contents and uses Google Drive indexed OCR for scanned PDFs. High-confidence matches are added as unpublished materials; uncertain matches need review. Non-PDF files are inventoried but are not yet importable.")
+            Button(enabled=!busy, onClick={
+                job {
+                    val result = backend.scanDriveMaterials(8)
+                    scanSummary = "Scanned ${result.optInt("scanned")} new PDFs. ${result.optInt("remaining_unscanned")} remain. Found ${result.optInt("total_files_found")} files across ${result.optInt("folders_scanned")} folders; ${result.optInt("non_pdf_files")} non-PDF files are inventoried but not yet importable."
+                    importCandidates = backend.driveImportQueue()
+                    notice = scanSummary
+                }
+            }) { Text("Scan Drive now (up to 8 PDFs)") }
+            OutlinedButton(enabled=!busy, onClick={ job { importCandidates = backend.driveImportQueue() } }) { Text("Refresh review queue") }
+            if (scanSummary.isNotBlank()) Text(scanSummary, style=MaterialTheme.typography.bodyMedium)
+            if (!busy && importCandidates.isEmpty()) Text("No scanned documents in the review queue yet.")
+            importCandidates.forEach { item ->
+                var selectedTitle by remember(item.id) { mutableStateOf(item.suggestedTitle) }
+                var selectedModuleId by remember(item.id) { mutableStateOf(item.suggestedModuleId) }
+                var selectedCategory by remember(item.id) { mutableStateOf(item.category) }
+                var moduleMenu by remember(item.id) { mutableStateOf(false) }
+                var categoryMenu by remember(item.id) { mutableStateOf(false) }
+                val selectedModule = importModules.firstOrNull { it.id == selectedModuleId }
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                        Text(item.fileName, style=MaterialTheme.typography.titleMedium)
+                        OutlinedTextField(value=selectedTitle, onValueChange={ selectedTitle=it }, label={ Text("Material title") }, modifier=Modifier.fillMaxWidth())
+                        Text("Status: ${item.status} · Confidence: ${(item.confidence * 100).toInt()}%")
+                        Text(if(item.moduleCode.isNotBlank()) "Suggested module: ${item.moduleCode} · ${item.moduleTitle}" else "No reliable module match. Select the correct module below.")
+                        Text("Suggested category: ${item.category}")
+                        Box {
+                            OutlinedButton(enabled=!busy, onClick={ moduleMenu=true }) {
+                                Text(selectedModule?.let { "${it.code} · ${it.title}" } ?: "Choose module")
+                            }
+                            DropdownMenu(expanded=moduleMenu, onDismissRequest={ moduleMenu=false }) {
+                                importModules.forEach { option ->
+                                    DropdownMenuItem(text={ Text("${option.code} · ${option.title}") }, onClick={ selectedModuleId=option.id; moduleMenu=false })
+                                }
+                            }
+                        }
+                        Box {
+                            OutlinedButton(enabled=!busy, onClick={ categoryMenu=true }) { Text(selectedCategory) }
+                            DropdownMenu(expanded=categoryMenu, onDismissRequest={ categoryMenu=false }) {
+                                MaterialCategories.forEach { option ->
+                                    DropdownMenuItem(text={ Text(option) }, onClick={ selectedCategory=option; categoryMenu=false })
+                                }
+                            }
+                        }
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            Button(enabled=!busy && selectedModuleId.isNotBlank() && item.status!="imported", onClick={
+                                job {
+                                    backend.approveDriveCandidate(item.id, selectedModuleId, selectedCategory, selectedTitle)
+                                    importCandidates = backend.driveImportQueue()
+                                    notice = "Imported as an unpublished material. You can publish it from the module's documents section."
+                                }
+                            }) { Text("Import material") }
+                            TextButton(enabled=!busy && item.status!="imported", onClick={
+                                job { backend.rejectDriveCandidate(item.id); importCandidates = backend.driveImportQueue() }
+                            }) { Text("Reject") }
+                        }
+                    }
+                }
+            }
+            OutlinedButton(enabled=!busy, onClick={ section="menu" }) { Text("Back to administrator menu") }
         }
         "students" -> {
             Text("Student accounts", style=MaterialTheme.typography.titleLarge)

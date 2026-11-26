@@ -1,0 +1,1 @@
+create index if not exists drive_import_candidates_imported_document_id_idx on public.drive_import_candidates(imported_document_id);

@@ -12,6 +12,19 @@ Native Kotlin + Jetpack Compose + Material 3 app, based on the Stage 3 project. 
 - Applied Stage 4 migration prevents cascading deletion of modules/documents when a parent is deleted. Delete dependents explicitly first.
 - Student suspension, account editing and role management are deliberately not implemented in the app. This also prevents admins accidentally demoting their own account through the app. Student list does not expose email addresses from auth.users.
 
+## Automatic Google Drive materials importer
+
+The private Drive importer recursively scans the configured folder, nested folders and folder shortcuts every five minutes. It discovers new PDFs without relying on filenames, extracts selectable PDF text, and uses Google Drive's indexed full-text search as an OCR-aware fallback for scanned PDFs. Google Drive automatically indexes supported PDFs for search; the importer searches that indexed content for UNISA module codes and material-category terms. If the index is not ready, unclassified files are retried after six hours.
+
+High-confidence, unique module-and-category matches are registered automatically as unpublished materials. Ambiguous matches are held in the administrator review queue, where the module, category and title can be corrected before import. The source files remain in Drive and are not moved or deleted. Non-PDF files are currently counted and inventoried but are not yet registered as downloadable app materials.
+
+The scheduled job is Supabase Cron + pg_net. Its private credential is stored in Supabase Vault and a separate RLS-protected table; the Edge Function performs its own scheduled-request or administrator-session authentication. The importer uses the Google Drive read-only scope. The first attempt to create temporary Google Docs for OCR was rejected because Google service accounts have no storage quota, so the implementation uses Drive's built-in indexed text/OCR instead and does not create temporary Drive files.
+
+Relevant Google documentation:
+- Drive automatically indexes supported documents, PDFs and images for search: https://developers.google.com/workspace/drive/api/guides/file-metadata
+- Drive full-text search query syntax: https://developers.google.com/workspace/drive/api/guides/ref-search-terms
+- Supabase scheduled Edge Functions: https://supabase.com/docs/guides/functions/schedule-functions
+
 ## Google sign-in setup
 
 The app now includes a **Continue with Google** option on the welcome, sign-in and registration screens. It uses Supabase's Google OAuth flow and returns to the app through `org.studentmodulehub.app://auth/google`. A Google account signing in for the first time is created through Supabase Auth; the existing database signup trigger should create its student profile.
