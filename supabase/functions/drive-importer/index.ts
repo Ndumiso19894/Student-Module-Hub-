@@ -415,7 +415,7 @@ Deno.serve(async (req) => {
         remaining_unscanned: Math.max(0, pending.length - batch.length),
         scheduled: isScheduledRun,
         results,
-        note: "Every nested folder is inventoried. Text PDFs use direct extraction; when text is missing, matching uses Google Drive's indexed document text, which includes OCR for supported PDFs and images. Non-PDF files are inventoried but are not yet importable as app materials.",
+        note: "Every nested folder is inventoried. Text PDFs use direct extraction; when text is missing, matching uses Google Drive's indexed document text, which includes OCR-indexed text for supported scanned PDFs. Non-PDF files are inventoried but are not yet importable as app materials.",
       });
     }
 
