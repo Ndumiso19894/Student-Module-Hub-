@@ -324,6 +324,49 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         }, { onConflict: "drive_file_id" }).select("id,drive_file_id,file_name,suggested_title,suggested_module_id,suggested_category,confidence,status").single();
         if (saveError) throw new Error("Could not save a scan result.");
+        if (status === "pending" && found.module && found.categoryMatches.length === 1) {
+          const { data: existingSource } = await admin.from("document_sources")
+            .select("document_id").eq("external_file_id", file.id).maybeSingle();
+          if (existingSource?.document_id) {
+            await admin.from("drive_import_candidates").update({
+              status: "imported", imported_document_id: existingSource.document_id, updated_at: new Date().toISOString(),
+            }).eq("id", saved.id);
+            saved.status = "imported";
+          } else {
+            const { data: module } = await admin.from("modules")
+              .select("id,code,semester").eq("id", found.module.id).maybeSingle();
+            if (module) {
+              const suggestedTitle = inferTitle(extracted, file.name);
+              const { data: document, error: docError } = await admin.from("documents").insert({
+                module_id: module.id,
+                title: suggestedTitle,
+                description: "Automatically identified from Google Drive. Original filename: " + file.name,
+                category: found.category,
+                semester: module.semester || "Not specified",
+                published: false,
+              }).select("id").single();
+              if (!docError && document) {
+                const { error: sourceError } = await admin.from("document_sources").upsert({
+                  document_id: document.id,
+                  provider: "google_drive",
+                  external_file_id: file.id,
+                  mime_type: "application/pdf",
+                  size_bytes: file.size ? Number(file.size) : null,
+                  drive_modified_at: file.modifiedTime ?? null,
+                  updated_at: new Date().toISOString(),
+                }, { onConflict: "document_id" });
+                if (!sourceError) {
+                  await admin.from("drive_import_candidates").update({
+                    status: "imported", imported_document_id: document.id, updated_at: new Date().toISOString(),
+                  }).eq("id", saved.id);
+                  saved.status = "imported";
+                } else {
+                  await admin.from("documents").delete().eq("id", document.id);
+                }
+              }
+            }
+          }
+        }
         results.push(saved);
       }
       return json({
@@ -381,7 +424,7 @@ Deno.serve(async (req) => {
         .select("*").eq("id", candidateId).maybeSingle();
       if (!candidate) return json({ error: "Candidate not found." }, 404);
       if (candidate.status === "imported") return json({ error: "This PDF has already been imported." }, 409);
-      const { data: module } = await admin.from("modules").select("id,title,code,qualification_id").eq("id", moduleId).maybeSingle();
+      const { data: module } = await admin.from("modules").select("id,title,code,qualification_id,semester").eq("id", moduleId).maybeSingle();
       if (!module) return json({ error: "Selected module does not exist." }, 404);
       const title = (requestedTitle || candidate.suggested_title || candidate.file_name || "UNISA study material")
         .replace(/\.pdf$/i, "").slice(0, 240);
@@ -390,6 +433,7 @@ Deno.serve(async (req) => {
         title,
         description: "Imported from Google Drive. Original filename: " + candidate.file_name,
         category,
+        semester: module.semester || "Not specified",
         published: false,
       }).select("id").single();
       if (docError || !document) throw new Error("Could not create the module material record.");
