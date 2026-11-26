@@ -99,7 +99,10 @@ async function driveOcrPdfText(token: string, fileId: string): Promise<string> {
       headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
       body: JSON.stringify({ title: "__STUDENT_MODULE_HUB_OCR_TEMP__" + fileId + "__" + Date.now() }),
     });
-    if (!copied.ok) throw new Error("Google Drive OCR conversion failed.");
+    if (!copied.ok) {
+      const detail = await copied.text().catch(() => "");
+      throw new Error("Google Drive OCR conversion failed (HTTP " + copied.status + "): " + detail.slice(0, 500));
+    }
     const temp = await copied.json();
     temporaryDocId = String(temp.id ?? "");
     if (!temporaryDocId) throw new Error("Google Drive OCR did not return a temporary document.");
