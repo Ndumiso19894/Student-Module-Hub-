@@ -30,4 +30,4 @@ jobs:
             echo "::error::Missing GitHub Actions secret SUPABASE_ACCESS_TOKEN"
             exit 1
           fi
-          supabase functions deploy drive-materials --project-ref kcejjvrbuuynwxobafzg
+          supabase functions deploy drive-materials --remote=kcejjvrbuuynwxobafzg --yes
