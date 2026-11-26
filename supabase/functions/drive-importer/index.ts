@@ -115,6 +115,16 @@ const categories = [
   { name: "Lecture Notes", terms: ["lecture notes", "lecture note", "class notes"] },
 ];
 
+function inferTitle(text: string, fileName: string): string {
+  const cleaned = text.replace(/[\\t\\r]+/g, " ").split(/\\n+/)
+    .map((line) => line.replace(/\\s+/g, " ").trim())
+    .filter((line) => line.length >= 8 && line.length <= 180);
+  const useful = cleaned.find((line) =>
+    !/^([A-Z]{2,}[0-9]{3,}|UNISA|UNIVERSITY OF SOUTH AFRICA|ASSIGNMENT [0-9]+)/i.test(line)
+  );
+  return (useful ?? fileName.replace(/\\.pdf$/i, "")).slice(0, 240);
+}
+
 function identify(text: string, modules: any[]) {
   const upper = text.toUpperCase();
   const matches = modules.filter((m) => {
@@ -161,11 +171,11 @@ Deno.serve(async (req) => {
       const files = await allPdfs(token, rootId);
       const { data: modules, error: moduleError } = await admin.from("modules").select("id,code,title");
       if (moduleError) throw new Error("Could not load the module catalogue.");
-      const { data: existing, error: existingError } = await admin.from("drive_import_candidates").select("drive_file_id");
+      const { data: existing, error: existingError } = await admin.from("drive_import_candidates").select("drive_file_id,status");
       if (existingError) throw new Error("Could not load the import queue.");
-      const known = new Set((existing ?? []).map((row: any) => row.drive_file_id));
+      const known = new Map((existing ?? []).map((row: any) => [row.drive_file_id, row.status]));
       const rescan = body?.rescan === true;
-      const pending = rescan ? files : files.filter((file) => !known.has(file.id));
+      const pending = files.filter((file) => known.get(file.id) !== "imported" && (rescan || !known.has(file.id)));
       const limit = Math.max(1, Math.min(Number(body?.limit ?? 8), 15));
       const batch = pending.slice(0, limit);
       const results: any[] = [];
@@ -186,6 +196,7 @@ Deno.serve(async (req) => {
         const { data: saved, error: saveError } = await admin.from("drive_import_candidates").upsert({
           drive_file_id: file.id,
           file_name: file.name,
+          suggested_title: inferTitle(extracted, file.name),
           mime_type: file.mimeType,
           size_bytes: file.size ? Number(file.size) : null,
           drive_modified_at: file.modifiedTime ?? null,
@@ -197,7 +208,7 @@ Deno.serve(async (req) => {
           status,
           last_scanned_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        }, { onConflict: "drive_file_id" }).select("id,drive_file_id,file_name,suggested_module_id,suggested_category,confidence,status").single();
+        }, { onConflict: "drive_file_id" }).select("id,drive_file_id,file_name,suggested_title,suggested_module_id,suggested_category,confidence,status").single();
         if (saveError) throw new Error("Could not save a scan result.");
         results.push(saved);
       }
@@ -213,7 +224,7 @@ Deno.serve(async (req) => {
     if (action === "queue") {
       const status = String(body?.status ?? "");
       let query = admin.from("drive_import_candidates")
-        .select("id,drive_file_id,file_name,parent_folder_id,suggested_module_id,suggested_category,confidence,evidence,status,imported_document_id,last_scanned_at")
+        .select("id,drive_file_id,file_name,suggested_title,parent_folder_id,suggested_module_id,suggested_category,confidence,evidence,status,imported_document_id,last_scanned_at")
         .order("confidence", { ascending: false }).limit(100);
       if (status) query = query.eq("status", status);
       const { data, error } = await query;
@@ -228,6 +239,7 @@ Deno.serve(async (req) => {
       const candidateId = String(body?.candidate_id ?? "");
       const moduleId = String(body?.module_id ?? "");
       const category = String(body?.category ?? "");
+      const requestedTitle = String(body?.title ?? "").trim();
       if (!/^[0-9a-f-]{36}$/i.test(candidateId) || !/^[0-9a-f-]{36}$/i.test(moduleId)) {
         return json({ error: "A valid candidate and module are required." }, 400);
       }
