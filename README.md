@@ -5,14 +5,14 @@ Native Kotlin + Jetpack Compose + Material 3 app, based on the Stage 3 project. 
 ## What is implemented
 - Student profile and live qualification → module → document-metadata browsing, with empty states. Actual PDFs are not connected.
 - Admin dashboard: read-only list of profiles (name, ID, role and creation date); create/edit/publish/unpublish qualifications, modules and document metadata; assign modules to qualifications, documents to modules; delete with confirmation.
-- SQL row-level security from Stage 3 restricts reads to published records and published parents for students, with admin access to catalogue management. Public signup trigger creates a student profile; clients cannot update role.
+- SQL row-level security from Stage 3 restricts reads to published records and published parents for students, with admin access to catalogue management. Public signup trigger creates a `student` profile; clients cannot update `role`.
 - Applied Stage 4 migration prevents cascading deletion of modules/documents when a parent is deleted. Delete dependents explicitly first.
 - Student suspension, account editing and role management are deliberately not implemented in the app. This also prevents admins accidentally demoting their own account through the app. Student list does not expose email addresses from auth.users.
 
 ## Verification results
 - `testDebugUnitTest assembleDebug`: successful. Five unit tests cover form validation only, not app UI or security.
 - Migration `stage4_prevent_catalogue_cascade_deletes` was applied to the real project and verified: both FKs use ON DELETE RESTRICT.
-- Live database inspection: both role policies and RLS were present; profile role default is student; authenticated does not have UPDATE privilege on the role column.
+- Live database inspection: both role policies and RLS were present; profile role default is student; `authenticated` does not have UPDATE privilege on the role column.
 - Anonymous live HTTP GET of profiles, qualifications, modules and documents: all HTTP 401. Anonymous qualification POST: HTTP 401.
 - NOT tested: real student/admin account login; student/admin CRUD and RLS scenarios; registration, confirmation, persistence, recovery and logout on Android; phone UI interactions. This debug build is not ready to be treated as production without those tests and security review.
 
@@ -46,3 +46,6 @@ returning p.id, p.role;
 
 ## Build
 JDK 17, Android SDK platform 35, Gradle wrapper 8.9: `./gradlew testDebugUnitTest assembleDebug`. The output is `app/build/outputs/apk/debug/app-debug.apk`. Public project configuration is in gradle.properties. This is a debug-signed APK, not a production release; production needs release signing, backups, monitoring, SMTP, comprehensive role tests, and independent security review.
+
+## Repository upload note
+The text source and project configuration have been uploaded. The binary `gradle/wrapper/gradle-wrapper.jar` was not included in this upload, so the checked-in `gradlew` launchers will need that standard Gradle wrapper JAR restored before they can run. This repository upload is therefore not yet a fully self-contained build checkout.
