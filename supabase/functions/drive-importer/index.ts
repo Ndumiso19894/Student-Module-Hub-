@@ -149,7 +149,7 @@ async function driveInventory(token: string, rootId: string) {
   return { pdfs, totalFiles, foldersVisited: visited.size, mimeCounts };
 }
 
-async function extractPdfText(token: string, fileId: string): Promise<{ text: string; pages: number }> {
+async function extractPdfText(token: string, fileId: string): Promise<{ text: string; pages: number; frontMatter: string }> {
   const response = await fetch(
     "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?alt=media",
     { headers: { Authorization: "Bearer " + token } },
@@ -163,17 +163,20 @@ async function extractPdfText(token: string, fileId: string): Promise<{ text: st
   const doc = await task.promise;
   const pages = doc.numPages;
   const pieces: string[] = [];
+  const frontMatterPieces: string[] = [];
   const pagesToRead = Math.min(pages, 12);
   for (let n = 1; n <= pagesToRead; n++) {
     const page = await doc.getPage(n);
     const content = await page.getTextContent();
-    pieces.push(content.items.map((item: any) =>
+    const pageText = content.items.map((item: any) =>
       (typeof item.str === "string" ? item.str : "") + (item.hasEOL ? "\n" : " ")
-    ).join(""));
+    ).join("");
+    pieces.push(pageText);
+    if (n <= 3) frontMatterPieces.push(pageText);
   }
   await doc.destroy();
   const text = pieces.join("\n").slice(0, 120000);
-  return { text, pages };
+  return { text, pages, frontMatter: frontMatterPieces.join("\n") };
 }
 
 const categories = [
@@ -186,17 +189,18 @@ const categories = [
   { name: "Lecture Notes", terms: ["lecture notes", "lecture note", "class notes"] },
 ];
 
-function inferTitle(text: string, fileName: string): string {
+function inferTitle(text: string, fileName: string, moduleTitle = ""): string {
   const cleaned = text.split(/\n+/)
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter((line) => line.length >= 8 && line.length <= 180);
   const useful = cleaned.find((line) =>
-    !/^([A-Z]{2,}[0-9]{3,}|UNISA|UNIVERSITY OF SOUTH AFRICA|ASSIGNMENT [0-9]+)/i.test(line)
+    !/(©|copyright|university of south africa|\bUNISA\b|all rights reserved|printed|page \d|study@unisa|module code)/i.test(line)
   );
-  return (useful ?? fileName.replace(/\.pdf$/i, "")).slice(0, 240);
+  const fallback = fileName.replace(/\.pdf$/i, "");
+  return (useful || (moduleTitle ? moduleTitle + " - " + fallback : fallback)).slice(0, 240);
 }
 
-function identify(text: string, modules: any[]) {
+function identify(text: string, modules: any[], categoryText = text) {
   const upper = text.toUpperCase();
   const matches = modules.filter((m) => {
     const code = String(m.code ?? "").trim().toUpperCase();
@@ -214,8 +218,9 @@ function identify(text: string, modules: any[]) {
     ? [...codeGroups[0][1]].sort((a, b) => String(b.title ?? "").length - String(a.title ?? "").length)
     : [];
   const chosenModule = chosenGroup[0] ?? null;
-  const categoryMatches = categories.filter((c) => c.terms.some((term) => upper.includes(term.toUpperCase())));
-  const category = categoryMatches.length === 1 ? categoryMatches[0].name : "Other Study Materials";
+  const categoryUpper = categoryText.toUpperCase();
+  const categoryMatches = categories.filter((c) => c.terms.some((term) => categoryUpper.includes(term.toUpperCase())));
+  const category = categoryMatches[0]?.name ?? "Other Study Materials";
   let confidence = codeGroups.length === 1
     ? (chosenGroup.length === 1 ? 0.98 : 0.90)
     : codeGroups.length > 1 ? 0.55 : 0;
@@ -282,15 +287,16 @@ Deno.serve(async (req) => {
           const parsed = await extractPdfText(token, file.id);
           extracted = parsed.text;
           pageCount = parsed.pages;
+          var frontMatter = parsed.frontMatter;
         } catch (error) {
           parseError = error instanceof Error ? error.message : "PDF text extraction failed.";
         }
-        let found = identify(extracted, modules ?? []);
+        let found = identify(extracted, modules ?? [], typeof frontMatter === "string" ? frontMatter : extracted);
         if (!parseError && found.codeGroups.length === 0) {
           indexedSearchUsed = true;
           const indexedCode = await findIndexedModuleCode(token, file.parents?.[0] ?? rootId, file.id, modules ?? []);
           if (indexedCode) {
-            found = identify(extracted + "\\n" + indexedCode, modules ?? []);
+            found = identify(extracted + "\\n" + indexedCode, modules ?? [], typeof frontMatter === "string" ? frontMatter : extracted);
             found.evidence.push({ type: "drive_ocr_index", value: indexedCode });
           }
         }
@@ -310,7 +316,7 @@ Deno.serve(async (req) => {
         const { data: saved, error: saveError } = await admin.from("drive_import_candidates").upsert({
           drive_file_id: file.id,
           file_name: file.name,
-          suggested_title: inferTitle(extracted, file.name),
+          suggested_title: inferTitle(extracted, file.name, found.module?.title ?? ""),
           mime_type: file.mimeType,
           size_bytes: file.size ? Number(file.size) : null,
           drive_modified_at: file.modifiedTime ?? null,
@@ -336,7 +342,7 @@ Deno.serve(async (req) => {
             const { data: module } = await admin.from("modules")
               .select("id,code,semester").eq("id", found.module.id).maybeSingle();
             if (module) {
-              const suggestedTitle = inferTitle(extracted, file.name);
+              const suggestedTitle = inferTitle(extracted, file.name, found.module?.title ?? "");
               const { data: document, error: docError } = await admin.from("documents").insert({
                 module_id: module.id,
                 title: suggestedTitle,
