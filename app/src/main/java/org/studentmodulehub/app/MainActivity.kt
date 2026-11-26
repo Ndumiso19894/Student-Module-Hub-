@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -27,10 +28,12 @@ import androidx.core.content.FileProvider
 import java.io.File
 import kotlinx.coroutines.launch
 
-private val Navy = Color(0xFF142A40)
-private val Teal = Color(0xFF006B61)
-private val Pale = Color(0xFFF3F7F6)
-private val scheme = lightColorScheme(primary = Teal, secondary = Navy, background = Pale, surface = Color.White, onPrimary = Color.White)
+private val Navy = Color(0xFF172554)
+private val Blue = Color(0xFF2563EB)
+private val Teal = Color(0xFF14B8A6)
+private val Pale = Color(0xFFF4F7FC)
+private val Muted = Color(0xFF64748B)
+private val scheme = lightColorScheme(primary = Blue, secondary = Navy, tertiary = Teal, background = Pale, surface = Color.White, onPrimary = Color.White)
 
 class MainActivity : ComponentActivity() {
     private var callback by mutableStateOf<Pair<String, String>?>(null)
@@ -65,6 +68,11 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     var qualifications by remember { mutableStateOf<List<Qualification>>(emptyList()) }
     var modules by remember { mutableStateOf<List<Module>>(emptyList()) }
     var documents by remember { mutableStateOf<List<Document>>(emptyList()) }
+    var searchQuery by remember { mutableStateOf("") }
+    var searchColleges by remember { mutableStateOf<List<College>>(emptyList()) }
+    var searchQualifications by remember { mutableStateOf<List<Qualification>>(emptyList()) }
+    var searchModules by remember { mutableStateOf<List<Module>>(emptyList()) }
+    var localDownloads by remember { mutableStateOf<List<File>>(emptyList()) }
     val scope = rememberCoroutineScope()
     fun clearMessage() { message = "" }
     fun go(value: String) { clearMessage(); screen = value }
@@ -108,8 +116,19 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     }
     fun openModules(q: Qualification) {
         qualification = q; go("modules"); modules = emptyList()
-        if (demo) modules = listOf(Module("sample-1", "Introduction to Management", "BUS101", "Sample module for navigation testing.", true), Module("sample-2", "Business Communication", "BUS102", "Sample module for navigation testing.", true))
+        if (demo) modules = listOf(Module("sample-1", "Introduction to Management", "BUS101", "Sample module for navigation testing.", true, qualificationId = q.id), Module("sample-2", "Business Communication", "BUS102", "Sample module for navigation testing.", true, qualificationId = q.id))
         else run { modules = backend.modules(q.id) }
+    }
+    fun openSearch() {
+        go("search"); searchQuery = ""
+        if (demo) {
+            searchColleges = listOf(College("SAMPLE", "Sample College"))
+            searchQualifications = listOf(Qualification("sample", "Diploma in Business Studies", "Sample qualification", true, "SAMPLE"))
+            searchModules = listOf(Module("sample-1", "Introduction to Management", "BUS101", "Sample module", true, qualificationId = "sample"))
+        } else {
+            searchColleges = emptyList(); searchQualifications = emptyList(); searchModules = emptyList()
+            run { searchColleges = backend.colleges(); searchQualifications = backend.qualifications(); searchModules = backend.allModules() }
+        }
     }
     LaunchedEffect(Unit) {
         if (backend.configured && callback == null) {
@@ -154,13 +173,31 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     }
     var selectedModule by remember { mutableStateOf<Module?>(null) }
     val context = LocalContext.current
+    fun openDownloads() {
+        go("downloads")
+        val folder = File(context.cacheDir, "study-materials")
+        localDownloads = folder.listFiles()?.filter { it.isFile && it.extension.equals("pdf", true) }?.sortedByDescending { it.lastModified() } ?: emptyList()
+    }
     Scaffold(containerColor = Pale, topBar = {
         if (screen !in listOf("welcome", "login", "register", "forgot", "resetPassword")) {
             CenterAlignedTopAppBar(
-                title = { Text("Student Module Hub", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) },
+                title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.size(30.dp).background(Navy, RoundedCornerShape(9.dp)), contentAlignment = Alignment.Center) { Text("S", color = Color.White, fontWeight = FontWeight.Bold) }
+                    Text("Student Module Hub", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Navy)
+                } },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White),
-                actions = { TextButton(onClick = { go("profile") }) { Text("Profile") } }
+                actions = { TextButton(onClick = ::openSearch) { Text("Search") } }
             )
+        }
+    }, bottomBar = {
+        if (screen in listOf("home", "colleges", "qualifications", "modules", "moduleDetail", "search", "downloads", "profile", "admin")) {
+            NavigationBar(containerColor = Color.White, tonalElevation = 6.dp) {
+                NavigationBarItem(selected = screen == "home", onClick = { go("home") }, icon = { Text("⌂", style = MaterialTheme.typography.titleLarge) }, label = { Text("Home") })
+                NavigationBarItem(selected = screen in listOf("colleges", "qualifications", "modules", "moduleDetail"), onClick = ::openQualifications, icon = { Text("▦", style = MaterialTheme.typography.titleLarge) }, label = { Text("Browse") })
+                NavigationBarItem(selected = screen == "search", onClick = ::openSearch, icon = { Text("⌕", style = MaterialTheme.typography.titleLarge) }, label = { Text("Search") })
+                NavigationBarItem(selected = screen == "downloads", onClick = ::openDownloads, icon = { Text("↓", style = MaterialTheme.typography.titleLarge) }, label = { Text("Files") })
+                NavigationBarItem(selected = screen == "profile" || screen == "admin", onClick = { go("profile") }, icon = { Text("●", style = MaterialTheme.typography.titleLarge) }, label = { Text("Profile") })
+            }
         }
     }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -214,13 +251,28 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     run { backend.updatePassword(password); profile = null; screen = "login"; message = "Password updated. Please sign in with your new password." }
                 })
                 "home" -> {
-                    Text("YOUR LEARNING SPACE", style = MaterialTheme.typography.labelMedium, color = Teal, fontWeight = FontWeight.Bold)
-                    Text(if (demo) "Welcome, student" else "Welcome${profile?.name?.takeIf { it.isNotBlank() }?.let { ", $it" } ?: ""}", style = MaterialTheme.typography.headlineMedium, color = Navy, fontWeight = FontWeight.Bold)
-                    Text("Pick up where your learning begins.", color = Color(0xFF536477))
-                    HubCard("Explore qualifications", "Find your programme and browse its modules.", "Browse qualifications", ::openQualifications)
-                    HubCard("Your profile", "View your account information and role.", "View profile", { go("profile") })
-                    if (!demo && profile?.role == "admin") HubCard("Administrator", "Access the administration foundation.", "Open dashboard", { go("admin") })
-                    Text("Browse the UNISA catalogue by college, qualification and module.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Text("YOUR LEARNING SPACE", style = MaterialTheme.typography.labelMedium, color = Blue, fontWeight = FontWeight.Bold)
+                    Text(if (demo) "Welcome, student" else "Welcome back", style = MaterialTheme.typography.headlineMedium, color = Navy, fontWeight = FontWeight.Bold)
+                    Text("Everything you need to keep your studies moving.", color = Muted)
+                    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Navy), modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("FIND YOUR NEXT RESOURCE", color = Color(0xFFB8D1FF), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            Text("Search the UNISA catalogue", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text("Look up colleges, qualifications, module codes and study materials.", color = Color(0xFFE2E8F0))
+                            Button(onClick = ::openSearch, colors = ButtonDefaults.buttonColors(containerColor = Blue)) { Text("⌕  Search catalogue") }
+                        }
+                    }
+                    Text("QUICK ACCESS", color = Blue, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        HomeTile("Browse colleges", "Explore all colleges", "▦", ::openQualifications, Modifier.weight(1f))
+                        HomeTile("My profile", "Account details", "●", { go("profile") }, Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        HomeTile("My files", "Recently opened PDFs", "↓", ::openDownloads, Modifier.weight(1f))
+                        HomeTile("Search", "Find a module", "⌕", ::openSearch, Modifier.weight(1f))
+                    }
+                    if (!demo && profile?.role == "admin") HubCard("Administrator tools", "Manage catalogue records and study resources.", "Open admin dashboard", { go("admin") })
+                    Text("Browse from college to qualification, module and its study materials.", style = MaterialTheme.typography.bodySmall, color = Muted)
                 }
                 "colleges" -> {
                     PageHeader("UNISA colleges", "Choose a college to browse its qualifications.")
@@ -272,17 +324,78 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     }
                     OutlinedButton(onClick = { go("modules") }) { Text("Back to modules") }
                 }
-                "profile" -> {
-                    PageHeader("Your profile", "Your account details")
-                    Card(colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(if (demo) "Sample student" else profile?.name.orEmpty().ifBlank { "Student" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                            Text(if (demo) "Sample profile · not signed in" else profile?.email.orEmpty())
-                            Text(if (demo) "Role: sample student" else "Role: ${profile?.role ?: "unknown"}", color = Teal)
+                "search" -> {
+                    PageHeader("Search the catalogue", "Search colleges, qualifications and module codes in one place.")
+                    OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        label = { Text("What are you looking for?") }, leadingIcon = { Text("⌕", style = MaterialTheme.typography.titleLarge, color = Blue) })
+                    if (busy && searchColleges.isEmpty()) Text("Loading catalogue...")
+                    if (searchQuery.isBlank()) Text("Start typing a college, qualification name or module code.", color = Muted)
+                    else {
+                        val term = searchQuery.trim()
+                        val foundColleges = searchColleges.filter { it.name.contains(term, true) || it.id.contains(term, true) }
+                        val foundQualifications = searchQualifications.filter { it.title.contains(term, true) || it.qualificationCode.contains(term, true) }
+                        val foundModules = searchModules.filter { it.title.contains(term, true) || it.code.contains(term, true) }.take(30)
+                        if (foundColleges.isEmpty() && foundQualifications.isEmpty() && foundModules.isEmpty() && !busy) Text("No matches found. Try a different name or module code.")
+                        if (foundColleges.isNotEmpty()) {
+                            Text("COLLEGES", color = Blue, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            foundColleges.forEach { c -> HubCard(c.name, "Browse qualifications in this college.", "View college") { openCollege(c) } }
+                        }
+                        if (foundQualifications.isNotEmpty()) {
+                            Text("QUALIFICATIONS", color = Blue, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            foundQualifications.take(25).forEach { qf -> HubCard(qf.title, listOf(qf.qualificationCode, qf.level, qf.academicYear?.toString().orEmpty()).filter { it.isNotBlank() }.joinToString(" · "), "View modules") { openModules(qf) } }
+                        }
+                        if (foundModules.isNotEmpty()) {
+                            Text("MODULES", color = Blue, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            foundModules.forEach { mod ->
+                                val parent = searchQualifications.firstOrNull { it.id == mod.qualificationId }
+                                HubCard(mod.title, listOf(mod.code, parent?.title.orEmpty()).filter { it.isNotBlank() }.joinToString(" · "), "Open module") {
+                                    if (parent != null) {
+                                        qualification = parent; selectedModule = mod; go("moduleDetail"); documents = emptyList()
+                                        if (!demo) run { documents = backend.documents(mod.id) }
+                                    }
+                                }
+                            }
                         }
                     }
-                    OutlinedButton(onClick = { go("home") }) { Text("Back to dashboard") }
-                    TextButton(enabled = !busy, onClick = { if (demo) { demo = false; profile = null; go("welcome") } else run { backend.logout(); profile = null; screen = "welcome" } }) { Text(if (demo) "Exit sample mode" else "Sign out") }
+                }
+                "downloads" -> {
+                    PageHeader("My files", "PDFs recently opened from your study materials.")
+                    if (localDownloads.isEmpty()) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("No recent PDFs", style = MaterialTheme.typography.titleMedium, color = Navy, fontWeight = FontWeight.Bold)
+                                Text("When you open a study document, it will appear here while it remains in temporary app storage.", color = Muted)
+                            }
+                        }
+                    } else localDownloads.forEach { file ->
+                        HubCard(file.name, "PDF · Recently opened", "Open PDF") {
+                            val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+                            context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                        }
+                    }
+                    Text("These are temporary cached files, not permanent offline downloads.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                }
+                "profile" -> {
+                    PageHeader("My profile", "Manage your Student Module Hub account.")
+                    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(Modifier.size(78.dp).background(Color(0xFFE8EEFF), CircleShape), contentAlignment = Alignment.Center) {
+                                Text(if (demo) "S" else profile?.name?.firstOrNull()?.uppercase() ?: "S", color = Blue, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                            }
+                            Text(if (demo) "Sample student" else profile?.name.orEmpty().ifBlank { "Student" }, style = MaterialTheme.typography.titleLarge, color = Navy, fontWeight = FontWeight.Bold)
+                            Text(if (demo) "Sample profile · not signed in" else profile?.email.orEmpty(), color = Muted)
+                            Surface(color = Color(0xFFE8F5F2), shape = RoundedCornerShape(50)) {
+                                Text(if (demo) "SAMPLE ACCOUNT" else (profile?.role ?: "STUDENT").uppercase(), color = Color(0xFF087A68), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp))
+                            }
+                        }
+                    }
+                    Text("ACCOUNT", color = Blue, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    HubCard("My qualifications", "Browse qualifications and their modules.", "Browse catalogue", ::openQualifications)
+                    HubCard("My recent files", "View PDFs opened from study materials.", "View files", ::openDownloads)
+                    if (!demo && profile?.role == "admin") HubCard("Administrator tools", "Manage catalogue records and study resources.", "Open admin", { go("admin") })
+                    Text("Account email", color = Muted, style = MaterialTheme.typography.labelSmall)
+                    Text(if (demo) "Not signed in" else profile?.email.orEmpty(), color = Navy)
+                    TextButton(enabled = !busy, onClick = { if (demo) { demo = false; profile = null; go("welcome") } else run { backend.logout(); profile = null; screen = "welcome" } }) { Text("Sign out") }
                 }
                 "admin" -> if (!demo && profile?.role == "admin") { AdminPanel(backend) { go("home") } } else { Text("Administrator access required.") }
             }
@@ -305,11 +418,22 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     if (subtitle.isNotBlank()) Text(subtitle, color = Color(0xFF536477))
 }
 @Composable fun HubCard(title: String, body: String, action: String, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = Navy)
-            if (body.isNotBlank()) Text(body, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF536477))
-            TextButton(onClick = onClick, contentPadding = PaddingValues(0.dp)) { Text("$action  →") }
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Navy)
+            if (body.isNotBlank()) Text(body, style = MaterialTheme.typography.bodyMedium, color = Muted)
+            Text(action + "  →", color = Blue, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+@Composable fun HomeTile(title: String, subtitle: String, symbol: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Card(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.size(40.dp).background(Color(0xFFEAF0FF), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
+                Text(symbol, color = Blue, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            }
+            Text(title, color = Navy, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
