@@ -25,9 +25,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import java.io.File
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.FileProvider
-import java.io.File
 import kotlinx.coroutines.launch
 
 private val Navy = Color(0xFF142A40)
@@ -156,7 +153,6 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
         }
     }
     var selectedModule by remember { mutableStateOf<Module?>(null) }
-    val context = LocalContext.current
     val context = LocalContext.current
     Scaffold(containerColor = Pale, topBar = {
         if (screen !in listOf("welcome", "login", "register", "forgot", "resetPassword")) {
