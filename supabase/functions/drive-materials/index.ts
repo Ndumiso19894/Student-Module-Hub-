@@ -178,9 +178,20 @@ Deno.serve(async (req) => {
         .from("qualifications").select("published").eq("id", module.qualification_id).maybeSingle();
       if (!qualification || (!isAdmin && !qualification.published)) return json({ error: "Material not available." }, 404);
       const { data: source, error: sourceError } = await admin
-        .from("document_sources").select("external_file_id,mime_type").eq("document_id", documentId).maybeSingle();
+        .from("document_sources").select("external_file_id,mime_type,storage_path").eq("document_id", documentId).maybeSingle();
       if (sourceError || !source || source.mime_type !== "application/pdf") {
         return json({ error: "PDF has not been linked to this material yet." }, 404);
+      }
+      const safeName = (document.title || "study-material").replace(/[\\/:*?"<>|\r\n]/g, "_").slice(0, 120) + ".pdf";
+      const headers = new Headers(cors);
+      headers.set("Content-Type", "application/pdf");
+      headers.set("Content-Disposition", 'attachment; filename="' + safeName.replace(/"/g, "") + '"');
+      headers.set("Cache-Control", "private, no-store");
+      if (source.storage_path) {
+        const { data: storedPdf, error: storageError } = await admin.storage.from("study-materials").download(source.storage_path);
+        if (storageError || !storedPdf) return json({ error: "Stored PDF could not be retrieved." }, 502);
+        headers.set("Content-Length", String(storedPdf.size));
+        return new Response(storedPdf.stream(), { status: 200, headers });
       }
       const token = await googleAccessToken();
       const driveResponse = await fetch(
@@ -188,11 +199,6 @@ Deno.serve(async (req) => {
         { headers: { Authorization: "Bearer " + token } },
       );
       if (!driveResponse.ok || !driveResponse.body) return json({ error: "Drive could not provide this PDF." }, 502);
-      const safeName = (document.title || "study-material").replace(/[\\/:*?"<>|\r\n]/g, "_").slice(0, 120) + ".pdf";
-      const headers = new Headers(cors);
-      headers.set("Content-Type", "application/pdf");
-      headers.set("Content-Disposition", 'attachment; filename="' + safeName.replace(/"/g, "") + '"');
-      headers.set("Cache-Control", "private, no-store");
       const length = driveResponse.headers.get("Content-Length");
       if (length) headers.set("Content-Length", length);
       return new Response(driveResponse.body, { status: 200, headers });
