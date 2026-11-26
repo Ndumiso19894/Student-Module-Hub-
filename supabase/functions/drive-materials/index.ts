@@ -60,6 +60,33 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
   try {
+    // Safe connectivity diagnostic: exposes no file names, IDs, or credentials.
+    // The Supabase Edge gateway still verifies the request JWT.
+    if (req.method === "POST") {
+      const incoming = await req.clone().json().catch(() => null);
+      if (incoming?.action === "diagnostic") {
+        const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+        if (!anonKey || req.headers.get("apikey") !== anonKey) {
+          return json({ error: "Supabase API key required." }, 401);
+        }
+        const folderId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
+        if (!folderId) return json({ connected: false, stage: "configuration", error: "Drive folder is not configured." }, 503);
+        const token = await googleAccessToken();
+        const check = await fetch(
+          "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(folderId) + "?fields=id,mimeType",
+          { headers: { Authorization: "Bearer " + token } },
+        );
+        if (!check.ok) {
+          return json({ connected: false, stage: "drive_access", error: "Google authenticated, but the folder could not be accessed." }, 502);
+        }
+        const folder = await check.json();
+        if (folder.mimeType !== "application/vnd.google-apps.folder") {
+          return json({ connected: false, stage: "drive_folder", error: "Configured Drive ID is not a folder." }, 400);
+        }
+        return json({ connected: true, google_authentication: "ok", drive_folder_access: "ok" });
+      }
+    }
+
     const authHeader = req.headers.get("Authorization") ?? "";
     if (!authHeader.startsWith("Bearer ")) return json({ error: "Sign-in required." }, 401);
 
