@@ -5,6 +5,9 @@ import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -60,6 +63,16 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     var modules by remember { mutableStateOf<List<Module>>(emptyList()) }
     var documents by remember { mutableStateOf<List<Document>>(emptyList()) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var downloadPath by remember { mutableStateOf("") }
+    var downloadName by remember { mutableStateOf("study-material.pdf") }
+    val savePdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        if (uri != null && downloadPath.isNotBlank()) run {
+            val bytes = backend.downloadDocumentPdf(downloadPath)
+            context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error("Could not save the PDF to this device.")
+            message = "PDF saved successfully."
+        }
+    }
     fun clearMessage() { message = "" }
     fun go(value: String) { clearMessage(); screen = value }
     fun errorMessage(e: Exception): String {
@@ -226,7 +239,19 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     Text(selectedModule?.description.orEmpty())
                     Text("Published documents", style = MaterialTheme.typography.titleLarge)
                     if (!busy && documents.isEmpty()) Text("No documents are available yet.")
-                    documents.forEach { doc -> Card(modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(doc.title, style=MaterialTheme.typography.titleMedium); Text(doc.description); if (!doc.published) Text("Draft"); Text("File access is not connected yet.", style=MaterialTheme.typography.bodySmall) } } }
+                    documents.forEach { doc -> Card(modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(doc.title, style=MaterialTheme.typography.titleMedium)
+                        Text(doc.description)
+                        if (!doc.published) Text("Draft")
+                        if (doc.storagePath.isNotBlank() && doc.published && !demo) {
+                            Text("PDF available", color = Teal, style = MaterialTheme.typography.bodySmall)
+                            OutlinedButton(enabled = !busy, onClick = {
+                                downloadPath = doc.storagePath
+                                downloadName = doc.storagePath.substringAfterLast('/').ifBlank { "study-material.pdf" }
+                                savePdfLauncher.launch(downloadName)
+                            }) { Text("Download PDF") }
+                        } else Text("PDF not uploaded yet.", style=MaterialTheme.typography.bodySmall, color=Color.Gray)
+                    } } }
                     OutlinedButton(onClick = { go("modules") }) { Text("Back to modules") }
                 }
                 "profile" -> {
