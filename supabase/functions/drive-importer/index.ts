@@ -65,6 +65,21 @@ async function driveList(token: string, folderId: string) {
   return files;
 }
 
+async function driveFullTextSearch(token: string, folderId: string, term: string) {
+  const safeTerm = term.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const params = new URLSearchParams({
+    q: "'" + folderId + "' in parents and trashed = false and fullText contains '" + safeTerm + "'",
+    pageSize: "1000",
+    fields: "nextPageToken,files(id,name,mimeType,parents)",
+  });
+  const response = await fetch("https://www.googleapis.com/drive/v3/files?" + params, {
+    headers: { Authorization: "Bearer " + token },
+  });
+  if (!response.ok) throw new Error("Google Drive full-text search failed (HTTP " + response.status + ").");
+  const data = await response.json();
+  return data.files ?? [];
+}
+
 async function driveInventory(token: string, rootId: string) {
   const queue = [rootId];
   const visited = new Set<string>();
@@ -299,6 +314,18 @@ Deno.serve(async (req) => {
         results,
         note: "Every nested folder is inventoried. PDFs are identified by their contents; image-only PDFs use Google Drive OCR. Non-PDF files are inventoried but are not yet importable as app materials.",
       });
+    }
+
+    if (action === "fulltext_test") {
+      const fileId = String(body?.file_id ?? "");
+      const term = String(body?.term ?? "");
+      const folderId = String(body?.folder_id ?? Deno.env.get("GOOGLE_DRIVE_FOLDER_ID") ?? "");
+      if (!/^[a-zA-Z0-9_-]{10,200}$/.test(fileId) || !/^[A-Z0-9-]{4,20}$/i.test(term) || !folderId) {
+        return json({ error: "A valid file ID, search term and folder are required." }, 400);
+      }
+      const token = await googleAccessToken();
+      const results = await driveFullTextSearch(token, folderId, term);
+      return json({ indexed_match: results.some((file: any) => file.id === fileId), matches: results.map((file: any) => ({ id: file.id, name: file.name })) });
     }
 
     if (action === "ocr_test") {
