@@ -25,6 +25,11 @@ import kotlinx.serialization.json.put
 import org.json.JSONArray
 import kotlinx.coroutines.withContext
 
+val MaterialCategories = listOf(
+    "Study Guides", "Tutorial Letters", "Assignment Questions", "Examination Question Papers",
+    "Examination Memorandums", "Prescribed Books", "Lecture Notes", "Other Study Materials"
+)
+
 class Backend(context: Context) {
     val configured get() = BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_ANON_KEY.isNotBlank()
     private val vault = SessionVault(context)
