@@ -23,7 +23,7 @@ async function googleAccessToken(): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const unsigned = textB64url(JSON.stringify({ alg: "RS256", typ: "JWT" })) + "." +
     textB64url(JSON.stringify({
-      iss: email, scope: "https://www.googleapis.com/auth/drive",
+      iss: email, scope: "https://www.googleapis.com/auth/drive.readonly",
       aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600,
     }));
   const cleanPem = pem.replace(/\\n/g, "\n").replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, "");
