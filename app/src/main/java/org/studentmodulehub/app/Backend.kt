@@ -86,17 +86,21 @@ class Backend(context: Context) {
         }.data)
         return (0 until rows.length()).map { rows.getJSONObject(it).let { o ->
             Qualification(o.getString("id"), o.getString("title"), o.optString("description"), o.optBoolean("published"),
-                o.optString("college_id"), o.optString("qualification_code"), o.optString("qualification_level"))
+                o.optString("college_id"), o.optString("qualification_code"), o.optString("qualification_level"),
+                if (o.isNull("academic_year")) null else o.optInt("academic_year"), o.optString("official_url"))
         } }.sortedBy { it.title }
     }
     suspend fun modules(qualificationId: String): List<Module> {
         require(qualificationId.matches(Regex("[0-9a-fA-F-]{36}")))
         val rows = JSONArray(client.from("modules").select { filter { eq("qualification_id", qualificationId) } }.data)
-        return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> Module(o.getString("id"), o.getString("title"), o.optString("code"), o.optString("description"), o.optBoolean("published")) } }.sortedBy { it.title }
+        return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> Module(o.getString("id"), o.getString("title"), o.optString("code"), o.optString("description"), o.optBoolean("published"),
+            if (o.isNull("credits")) null else o.optInt("credits"), if (o.isNull("nqf_level")) null else o.optInt("nqf_level"),
+            o.optString("semester"), if (o.isNull("academic_year")) null else o.optInt("academic_year"), o.optString("official_url")) } }.sortedBy { it.title }
     }
     suspend fun documents(moduleId: String): List<Document> {
         val rows = JSONArray(client.from("documents").select { filter { eq("module_id", moduleId) } }.data)
-        return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> Document(o.getString("id"), o.getString("title"), o.optString("description"), o.optBoolean("published"), o.optString("category", "Other Study Materials")) } }.sortedBy { it.title }
+        return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> Document(o.getString("id"), o.getString("title"), o.optString("description"), o.optBoolean("published"), o.optString("category", "Other Study Materials"),
+            if (o.isNull("academic_year")) null else o.optInt("academic_year"), o.optString("semester")) } }.sortedBy { it.title }
     }
     suspend fun drivePdfs(): List<DrivePdf> = driveRequest(org.json.JSONObject().put("action", "list")).let { response ->
         val files = response.optJSONArray("files") ?: JSONArray()
@@ -192,22 +196,22 @@ class Backend(context: Context) {
         val rows = JSONArray(client.from("profiles").select().data)
         return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> StudentAccount(o.getString("id"), o.optString("display_name"), o.optString("role"), o.optString("created_at")) } }.sortedBy { it.name }
     }
-    suspend fun saveItem(table: String, id: String?, title: String, description: String, code: String, parentId: String?, published: Boolean, category: String = "Other Study Materials", level: String = "") {
+    suspend fun saveItem(table: String, id: String?, title: String, description: String, code: String, parentId: String?, published: Boolean, category: String = "Other Study Materials", level: String = "", academicYear: Int? = null, credits: Int? = null, nqfLevel: Int? = null, semester: String = "", officialUrl: String = "") {
         require(table in listOf("qualifications", "modules", "documents")); require(title.isNotBlank())
         if (id == null) {
             val payload = buildJsonObject {
                 put("title", title.trim()); put("description", description.trim()); put("published", published)
-                if (table == "qualifications") { put("college_id", requireNotNull(parentId)); put("qualification_code", code.trim()); put("qualification_level", level.trim()) }
-                if (table == "modules") { put("qualification_id", requireNotNull(parentId)); put("code", code.trim()) }
-                if (table == "documents") { put("module_id", requireNotNull(parentId)); put("category", category) }
+                if (table == "qualifications") { put("college_id", requireNotNull(parentId)); put("qualification_code", code.trim()); put("qualification_level", level.trim()); if (academicYear != null) put("academic_year", academicYear); put("official_url", officialUrl.trim()) }
+                if (table == "modules") { put("qualification_id", requireNotNull(parentId)); put("code", code.trim()); if (credits != null) put("credits", credits); if (nqfLevel != null) put("nqf_level", nqfLevel); put("semester", semester.trim()); if (academicYear != null) put("academic_year", academicYear); put("official_url", officialUrl.trim()) }
+                if (table == "documents") { put("module_id", requireNotNull(parentId)); put("category", category); if (academicYear != null) put("academic_year", academicYear); put("semester", semester.trim()) }
             }
             client.from(table).insert(payload)
         } else {
             client.from(table).update({
                 set("title", title.trim()); set("description", description.trim()); set("published", published)
-                if (table == "qualifications") { set("college_id", requireNotNull(parentId)); set("qualification_code", code.trim()); set("qualification_level", level.trim()) }
-                if (table == "modules") { set("qualification_id", requireNotNull(parentId)); set("code", code.trim()) }
-                if (table == "documents") { set("module_id", requireNotNull(parentId)); set("category", category) }
+                if (table == "qualifications") { set("college_id", requireNotNull(parentId)); set("qualification_code", code.trim()); set("qualification_level", level.trim()); if (academicYear != null) set("academic_year", academicYear); set("official_url", officialUrl.trim()) }
+                if (table == "modules") { set("qualification_id", requireNotNull(parentId)); set("code", code.trim()); if (credits != null) set("credits", credits); if (nqfLevel != null) set("nqf_level", nqfLevel); set("semester", semester.trim()); if (academicYear != null) set("academic_year", academicYear); set("official_url", officialUrl.trim()) }
+                if (table == "documents") { set("module_id", requireNotNull(parentId)); set("category", category); if (academicYear != null) set("academic_year", academicYear); set("semester", semester.trim()) }
             }) { filter { eq("id", id) }; select() }.let { check(JSONArray(it.data).length() == 1) { "No record was updated." } }
         }
     }
@@ -220,12 +224,12 @@ class Backend(context: Context) {
 }
 class BackendException(val code: Int): Exception("Service request failed (HTTP $code).")
 data class College(val id: String, val name: String)
-data class Document(val id: String, val title: String, val description: String, val published: Boolean, val category: String = "Other Study Materials")
+data class Document(val id: String, val title: String, val description: String, val published: Boolean, val category: String = "Other Study Materials", val academicYear: Int? = null, val semester: String = "")
 data class DrivePdf(val id: String, val name: String, val sizeBytes: String, val modifiedAt: String)
 data class StudentAccount(val id: String, val name: String, val role: String, val createdAt: String)
 data class Profile(val id: String, val name: String, val email: String, val role: String)
-data class Qualification(val id: String, val title: String, val description: String, val published: Boolean, val collegeId: String = "", val qualificationCode: String = "", val level: String = "")
-data class Module(val id: String, val title: String, val code: String, val description: String, val published: Boolean)
+data class Qualification(val id: String, val title: String, val description: String, val published: Boolean, val collegeId: String = "", val qualificationCode: String = "", val level: String = "", val academicYear: Int? = null, val officialUrl: String = "")
+data class Module(val id: String, val title: String, val code: String, val description: String, val published: Boolean, val credits: Int? = null, val nqfLevel: Int? = null, val semester: String = "", val academicYear: Int? = null, val officialUrl: String = "")
 /** Encrypted session at rest; key stays in Android Keystore and backup is disabled. */
 private class SessionVault(context: Context) {
     private val prefs = context.getSharedPreferences("session", Context.MODE_PRIVATE)
