@@ -166,7 +166,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
             "modules" -> go("qualifications")
             "moduleDetail" -> go("modules")
             "qualifications" -> go("colleges")
-            "colleges", "profile", "admin" -> go("home")
+            "colleges", "profile", "admin", "search", "downloads" -> go("home")
             "home" -> if (demo) { demo = false; go("welcome") } else go("profile")
             else -> go("welcome")
         }
