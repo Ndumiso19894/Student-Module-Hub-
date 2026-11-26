@@ -71,9 +71,18 @@ class Backend(context: Context) {
         val row = rows.getJSONObject(0)
         return Profile(row.getString("id"), row.optString("display_name"), user.email.orEmpty(), row.optString("role", "student"))
     }
-    suspend fun qualifications(): List<Qualification> {
-        val rows = JSONArray(client.from("qualifications").select().data)
-        return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> Qualification(o.getString("id"), o.getString("title"), o.optString("description"), o.optBoolean("published")) } }.sortedBy { it.title }
+    suspend fun colleges(): List<College> {
+        val rows = JSONArray(client.from("colleges").select().data)
+        return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> College(o.getString("id"), o.getString("name")) } }.sortedBy { it.name }
+    }
+    suspend fun qualifications(collegeId: String? = null): List<Qualification> {
+        val rows = JSONArray(client.from("qualifications").select {
+            if (!collegeId.isNullOrBlank()) filter { eq("college_id", collegeId) }
+        }.data)
+        return (0 until rows.length()).map { rows.getJSONObject(it).let { o ->
+            Qualification(o.getString("id"), o.getString("title"), o.optString("description"), o.optBoolean("published"),
+                o.optString("college_id"), o.optString("qualification_code"), o.optString("qualification_level"))
+        } }.sortedBy { it.title }
     }
     suspend fun modules(qualificationId: String): List<Module> {
         require(qualificationId.matches(Regex("[0-9a-fA-F-]{36}")))
@@ -82,7 +91,7 @@ class Backend(context: Context) {
     }
     suspend fun documents(moduleId: String): List<Document> {
         val rows = JSONArray(client.from("documents").select { filter { eq("module_id", moduleId) } }.data)
-        return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> Document(o.getString("id"), o.getString("title"), o.optString("description"), o.optBoolean("published")) } }.sortedBy { it.title }
+        return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> Document(o.getString("id"), o.getString("title"), o.optString("description"), o.optBoolean("published"), o.optString("category", "Other Study Materials")) } }.sortedBy { it.title }
     }
     suspend fun drivePdfs(): List<DrivePdf> = driveRequest(org.json.JSONObject().put("action", "list")).let { response ->
         val files = response.optJSONArray("files") ?: JSONArray()
@@ -138,20 +147,22 @@ class Backend(context: Context) {
         val rows = JSONArray(client.from("profiles").select().data)
         return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> StudentAccount(o.getString("id"), o.optString("display_name"), o.optString("role"), o.optString("created_at")) } }.sortedBy { it.name }
     }
-    suspend fun saveItem(table: String, id: String?, title: String, description: String, code: String, parentId: String?, published: Boolean) {
+    suspend fun saveItem(table: String, id: String?, title: String, description: String, code: String, parentId: String?, published: Boolean, category: String = "Other Study Materials") {
         require(table in listOf("qualifications", "modules", "documents")); require(title.isNotBlank())
         if (id == null) {
             val payload = buildJsonObject {
                 put("title", title.trim()); put("description", description.trim()); put("published", published)
+                if (table == "qualifications") put("college_id", requireNotNull(parentId))
                 if (table == "modules") { put("qualification_id", requireNotNull(parentId)); put("code", code.trim()) }
-                if (table == "documents") put("module_id", requireNotNull(parentId))
+                if (table == "documents") { put("module_id", requireNotNull(parentId)); put("category", category) }
             }
             client.from(table).insert(payload)
         } else {
             client.from(table).update({
                 set("title", title.trim()); set("description", description.trim()); set("published", published)
+                if (table == "qualifications") set("college_id", requireNotNull(parentId))
                 if (table == "modules") { set("qualification_id", requireNotNull(parentId)); set("code", code.trim()) }
-                if (table == "documents") set("module_id", requireNotNull(parentId))
+                if (table == "documents") { set("module_id", requireNotNull(parentId)); set("category", category) }
             }) { filter { eq("id", id) }; select() }.let { check(JSONArray(it.data).length() == 1) { "No record was updated." } }
         }
     }
@@ -163,11 +174,12 @@ class Backend(context: Context) {
 
 }
 class BackendException(val code: Int): Exception("Service request failed (HTTP $code).")
-data class Document(val id: String, val title: String, val description: String, val published: Boolean)
+data class College(val id: String, val name: String)
+data class Document(val id: String, val title: String, val description: String, val published: Boolean, val category: String = "Other Study Materials")
 data class DrivePdf(val id: String, val name: String, val sizeBytes: String, val modifiedAt: String)
 data class StudentAccount(val id: String, val name: String, val role: String, val createdAt: String)
 data class Profile(val id: String, val name: String, val email: String, val role: String)
-data class Qualification(val id: String, val title: String, val description: String, val published: Boolean)
+data class Qualification(val id: String, val title: String, val description: String, val published: Boolean, val collegeId: String = "", val qualificationCode: String = "", val level: String = "")
 data class Module(val id: String, val title: String, val code: String, val description: String, val published: Boolean)
 /** Encrypted session at rest; key stays in Android Keystore and backup is disabled. */
 private class SessionVault(context: Context) {
