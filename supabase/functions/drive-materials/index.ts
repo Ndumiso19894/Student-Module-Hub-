@@ -65,10 +65,6 @@ Deno.serve(async (req) => {
     if (req.method === "POST") {
       const incoming = await req.clone().json().catch(() => null);
       if (incoming?.action === "diagnostic") {
-        const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-        if (!anonKey || req.headers.get("apikey") !== anonKey) {
-          return json({ error: "Supabase API key required." }, 401);
-        }
         const folderId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
         if (!folderId) return json({ connected: false, stage: "configuration", error: "Drive folder is not configured." }, 503);
         const token = await googleAccessToken();
