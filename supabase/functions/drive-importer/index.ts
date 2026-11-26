@@ -3,7 +3,7 @@ import * as pdfjs from "npm:pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info, x-drive-importer-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const json = (data: unknown, status = 200) =>
@@ -23,7 +23,7 @@ async function googleAccessToken(): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const unsigned = textB64url(JSON.stringify({ alg: "RS256", typ: "JWT" })) + "." +
     textB64url(JSON.stringify({
-      iss: email, scope: "https://www.googleapis.com/auth/drive.readonly",
+      iss: email, scope: "https://www.googleapis.com/auth/drive",
       aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600,
     }));
   const cleanPem = pem.replace(/\\n/g, "\n").replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, "");
@@ -82,7 +82,37 @@ async function allPdfs(token: string, rootId: string) {
   return result;
 }
 
-async function extractPdfText(token: string, fileId: string): Promise<{ text: string; pages: number }> {
+async function driveOcrPdfText(token: string, fileId: string): Promise<string> {
+  let temporaryDocId = "";
+  try {
+    const copyUrl = "https://www.googleapis.com/drive/v2/files/" + encodeURIComponent(fileId) +
+      "/copy?convert=true&ocr=true&ocrLanguage=en";
+    const copied = await fetch(copyUrl, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "__STUDENT_MODULE_HUB_OCR_TEMP__" + fileId + "__" + Date.now() }),
+    });
+    if (!copied.ok) throw new Error("Google Drive OCR conversion failed.");
+    const temp = await copied.json();
+    temporaryDocId = String(temp.id ?? "");
+    if (!temporaryDocId) throw new Error("Google Drive OCR did not return a temporary document.");
+    const exported = await fetch(
+      "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(temporaryDocId) +
+        "/export?mimeType=text%2Fplain",
+      { headers: { Authorization: "Bearer " + token } },
+    );
+    if (!exported.ok) throw new Error("Could not read the OCR text from Google Drive.");
+    return (await exported.text()).slice(0, 120000);
+  } finally {
+    if (temporaryDocId) {
+      await fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(temporaryDocId), {
+        method: "DELETE", headers: { Authorization: "Bearer " + token },
+      }).catch(() => undefined);
+    }
+  }
+}
+
+async function extractPdfText(token: string, fileId: string): Promise<{ text: string; pages: number; ocrUsed: boolean }> {
   const response = await fetch(
     "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?alt=media",
     { headers: { Authorization: "Bearer " + token } },
@@ -94,15 +124,23 @@ async function extractPdfText(token: string, fileId: string): Promise<{ text: st
   if (bytes.length > 20 * 1024 * 1024) throw new Error("PDF exceeds the 20 MB first-pass limit.");
   const task = pdfjs.getDocument({ data: bytes, useSystemFonts: true, isEvalSupported: false, disableFontFace: true, verbosity: 0 });
   const doc = await task.promise;
+  const pages = doc.numPages;
   const pieces: string[] = [];
-  const pagesToRead = Math.min(doc.numPages, 12);
+  const pagesToRead = Math.min(pages, 12);
   for (let n = 1; n <= pagesToRead; n++) {
     const page = await doc.getPage(n);
     const content = await page.getTextContent();
     pieces.push(content.items.map((item: any) => typeof item.str === "string" ? item.str : "").join(" "));
   }
   await doc.destroy();
-  return { text: pieces.join("\n").slice(0, 120000), pages: doc.numPages };
+  let text = pieces.join("\n").slice(0, 120000);
+  let ocrUsed = false;
+  if (text.replace(/\\s/g, "").length < 150) {
+    const ocrText = await driveOcrPdfText(token, fileId);
+    if (ocrText.trim().length > text.trim().length) text = ocrText;
+    ocrUsed = true;
+  }
+  return { text, pages, ocrUsed };
 }
 
 const categories = [
@@ -148,19 +186,28 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
   try {
     const authHeader = req.headers.get("Authorization") ?? "";
-    if (!authHeader.startsWith("Bearer ")) return json({ error: "Sign-in required." }, 401);
+    const cronSecret = req.headers.get("x-drive-importer-secret") ?? "";
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: userData, error: userError } = await userClient.auth.getUser();
-    if (userError || !userData.user) return json({ error: "Invalid or expired session." }, 401);
     const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { data: profile } = await admin.from("profiles").select("role").eq("id", userData.user.id).maybeSingle();
-    if (profile?.role !== "admin") return json({ error: "Administrator access required." }, 403);
+    let isScheduledRun = false;
+    if (cronSecret) {
+      const { data: cronAuth } = await admin.from("drive_importer_cron_auth")
+        .select("secret").eq("id", 1).maybeSingle();
+      if (!cronAuth?.secret || cronAuth.secret !== cronSecret) return json({ error: "Invalid scheduled-run credentials." }, 401);
+      isScheduledRun = true;
+    } else {
+      if (!authHeader.startsWith("Bearer ")) return json({ error: "Sign-in required." }, 401);
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data: userData, error: userError } = await userClient.auth.getUser();
+      if (userError || !userData.user) return json({ error: "Invalid or expired session." }, 401);
+      const { data: profile } = await admin.from("profiles").select("role").eq("id", userData.user.id).maybeSingle();
+      if (profile?.role !== "admin") return json({ error: "Administrator access required." }, 403);
+    }
 
     const body = await req.json();
     const action = String(body?.action ?? "");
@@ -182,11 +229,13 @@ Deno.serve(async (req) => {
       for (const file of batch) {
         let extracted = "";
         let pageCount = 0;
+        let ocrUsed = false;
         let parseError = "";
         try {
           const parsed = await extractPdfText(token, file.id);
           extracted = parsed.text;
           pageCount = parsed.pages;
+          ocrUsed = parsed.ocrUsed;
         } catch (error) {
           parseError = error instanceof Error ? error.message : "PDF text extraction failed.";
         }
@@ -204,7 +253,7 @@ Deno.serve(async (req) => {
           suggested_module_id: found.module?.id ?? null,
           suggested_category: found.category,
           confidence: found.confidence,
-          evidence: [...found.evidence, ...(parseError ? [{ type: "extraction_issue", value: parseError }] : []), { type: "pdf_pages_read", value: Math.min(pageCount, 12) }],
+          evidence: [...found.evidence, ...(parseError ? [{ type: "extraction_issue", value: parseError }] : []), { type: "pdf_pages_read", value: Math.min(pageCount, 12) }, { type: "ocr_used", value: ocrUsed }],
           status,
           last_scanned_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -216,8 +265,9 @@ Deno.serve(async (req) => {
         scanned: results.length,
         total_pdfs_found: files.length,
         remaining_unscanned: Math.max(0, pending.length - batch.length),
+        scheduled: isScheduledRun,
         results,
-        note: "Text-based PDFs are checked using their contents. Image-only scans need OCR and are kept unclassified.",
+        note: "Nested folders are scanned recursively. Text-based PDFs use text extraction; image-only PDFs use Google Drive OCR.",
       });
     }
 
@@ -252,7 +302,8 @@ Deno.serve(async (req) => {
       if (candidate.status === "imported") return json({ error: "This PDF has already been imported." }, 409);
       const { data: module } = await admin.from("modules").select("id,title,code,qualification_id").eq("id", moduleId).maybeSingle();
       if (!module) return json({ error: "Selected module does not exist." }, 404);
-      const title = String(candidate.file_name ?? "UNISA study material").replace(/\.pdf$/i, "").slice(0, 240);
+      const title = (requestedTitle || candidate.suggested_title || candidate.file_name || "UNISA study material")
+        .replace(/\.pdf$/i, "").slice(0, 240);
       const { data: document, error: docError } = await admin.from("documents").insert({
         module_id: moduleId,
         title,
