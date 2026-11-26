@@ -1,0 +1,8 @@
+<resources>
+    <color name="splash_background">#142A40</color>
+    <style name="Theme.StudentModuleHub" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_hub</item>
+        <item name="postSplashScreenTheme">@android:style/Theme.Material.Light.NoActionBar</item>
+    </style>
+</resources>
