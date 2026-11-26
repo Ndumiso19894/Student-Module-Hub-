@@ -6,7 +6,7 @@ Native Kotlin + Jetpack Compose + Material 3 app, based on the Stage 3 project. 
 - Student catalogue browsing by UNISA college → qualification → module, with search at each browsing level.
 - Student material lists grouped into Study Guides, Tutorial Letters, Assignment Questions, Examination Question Papers, Examination Memorandums, Prescribed Books, Lecture Notes and Other Study Materials. Published PDFs are retrieved through the authenticated private Drive gateway and opened with an installed PDF reader.
 - Admin dashboard: read-only list of profiles; create/edit/publish qualifications, modules and material records; assign qualifications to colleges, modules to qualifications, and materials to modules; set qualification codes/levels and material categories; link PDFs from the configured private Google Drive folder.
-- The catalogue database supports official qualification codes, levels, academic years, module credits/NQF levels/semester and source URLs. Existing records are preserved; qualification college assignments are nullable until an administrator classifies them.
+- The catalogue database and admin editor support official qualification codes, levels, academic years and source URLs, plus module credits/NQF levels/semester and material academic year/semester metadata. Existing records are preserved; qualification college assignments are nullable until an administrator classifies them.
 - Live catalogue import: 338 qualification records distributed across the eight colleges, covering verified 2027 undergraduate, honours, postgraduate diploma, master's and doctoral records. Four 2026 curriculum modules have been imported for the BA Honours in Corrections Management (98655). This is a larger verified foundation, not yet the complete UNISA catalogue.
 - SQL row-level security from Stage 3 restricts reads to published records and published parents for students, with admin access to catalogue management. Public signup trigger creates a `student` profile; clients cannot update `role`.
 - Applied Stage 4 migration prevents cascading deletion of modules/documents when a parent is deleted. Delete dependents explicitly first.
@@ -26,7 +26,7 @@ Before Google sign-in can work:
 This implementation opens Google's OAuth consent flow in the browser; it does not use the separate native Credential Manager button flow. Google sign-in has been added to source but is not yet build-verified or tested against the live provider.
 
 ## Verification results
-- The catalogue source changes passed GitHub Actions run #7 (`45870468940`): `testDebugUnitTest assembleDebug` completed successfully. This verifies the Android build and unit-test task, but does not replace physical-device or authenticated role/RLS testing.
+- The catalogue and documentation changes passed GitHub Actions run #8 (`45870845176`): `testDebugUnitTest assembleDebug` completed successfully. The latest metadata-form changes are undergoing their own build checks. This verifies the Android build and unit-test task, but does not replace physical-device or authenticated role/RLS testing.
 - The repository does not include `gradle/wrapper/gradle-wrapper.jar`; the validation workflow installs Gradle 8.9 directly and runs `gradle testDebugUnitTest assembleDebug`.
 - The current authentication UI changes have not yet been built or tested on a physical Android device.
 - Migration `stage4_prevent_catalogue_cascade_deletes` was applied to the real project and verified: both FKs use ON DELETE RESTRICT.
