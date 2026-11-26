@@ -14,6 +14,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -186,17 +192,17 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     Text("Student Module Hub", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Navy)
                 } },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White),
-                actions = { TextButton(onClick = ::openSearch) { Text("Search") } }
+                actions = { IconButton(onClick = ::openSearch) { Icon(Icons.Filled.Search, contentDescription = "Search catalogue", tint = Blue) } }
             )
         }
     }, bottomBar = {
         if (screen in listOf("home", "colleges", "qualifications", "modules", "moduleDetail", "search", "downloads", "profile", "admin")) {
             NavigationBar(containerColor = Color.White, tonalElevation = 6.dp) {
-                NavigationBarItem(selected = screen == "home", onClick = { go("home") }, icon = { Text("⌂", style = MaterialTheme.typography.titleLarge) }, label = { Text("Home") })
-                NavigationBarItem(selected = screen in listOf("colleges", "qualifications", "modules", "moduleDetail"), onClick = ::openQualifications, icon = { Text("▦", style = MaterialTheme.typography.titleLarge) }, label = { Text("Browse") })
-                NavigationBarItem(selected = screen == "search", onClick = ::openSearch, icon = { Text("⌕", style = MaterialTheme.typography.titleLarge) }, label = { Text("Search") })
-                NavigationBarItem(selected = screen == "downloads", onClick = ::openDownloads, icon = { Text("↓", style = MaterialTheme.typography.titleLarge) }, label = { Text("Files") })
-                NavigationBarItem(selected = screen == "profile" || screen == "admin", onClick = { go("profile") }, icon = { Text("●", style = MaterialTheme.typography.titleLarge) }, label = { Text("Profile") })
+                NavigationBarItem(selected = screen == "home", onClick = { go("home") }, icon = { Icon(Icons.Filled.Home, contentDescription = "Home") }, label = { Text("Home") })
+                NavigationBarItem(selected = screen in listOf("colleges", "qualifications", "modules", "moduleDetail"), onClick = ::openQualifications, icon = { Icon(Icons.Filled.School, contentDescription = "Browse colleges") }, label = { Text("Browse") })
+                NavigationBarItem(selected = screen == "search", onClick = ::openSearch, icon = { Icon(Icons.Filled.Search, contentDescription = "Search") }, label = { Text("Search") })
+                NavigationBarItem(selected = screen == "downloads", onClick = ::openDownloads, icon = { Icon(Icons.Filled.Download, contentDescription = "Downloads") }, label = { Text("Files") })
+                NavigationBarItem(selected = screen == "profile" || screen == "admin", onClick = { go("profile") }, icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") }, label = { Text("Profile") })
             }
         }
     }) { padding ->
