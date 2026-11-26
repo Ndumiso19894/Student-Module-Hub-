@@ -17,6 +17,14 @@ class ValidationTest {
         assertTrue(Validation.auth("", "not-an-email", "password", false).isNotEmpty())
     }
 
+    @Test fun emailValidationRejectsMissingDomain() {
+        assertTrue(!Validation.email("student@"))
+    }
+
+    @Test fun emailValidationAcceptsTrimmedAddress() {
+        assertTrue(Validation.email(" student@example.test "))
+    }
+
     @Test fun validRegistrationPasses() {
         assertEquals("", Validation.auth("Student", "student@example.test", "12345678", true, "12345678"))
     }
