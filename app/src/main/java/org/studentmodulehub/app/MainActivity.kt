@@ -62,10 +62,28 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     val scope = rememberCoroutineScope()
     fun clearMessage() { message = "" }
     fun go(value: String) { clearMessage(); screen = value }
-    fun errorMessage(e: Exception): String = when (e) {
-        is BackendException -> when (e.code) { 400, 401 -> "Request could not be completed. Check your details and backend settings."; 403 -> "Access denied. Check your account permissions."; 429 -> "Too many requests. Please try again later."; else -> "Service error (${e.code}). Please try again later." }
-        is java.io.IOException -> "Could not connect. Check your internet connection and backend configuration."
-        else -> "Request failed. Check your details, connection and email confirmation, then try again."
+    fun errorMessage(e: Exception): String {
+        val detail = generateSequence<Throwable>(e) { it.cause }
+            .take(3)
+            .joinToString(" → ") { cause ->
+                val type = cause::class.simpleName ?: "Error"
+                val description = cause.message?.replace(Regex("\\s+"), " ")?.take(180).orEmpty()
+                if (description.isBlank()) type else "$type: $description"
+            }
+        val summary = when (e) {
+            is BackendException -> when (e.code) {
+                400, 401 -> "The request was rejected. Check the account details and Supabase settings."
+                403 -> "Supabase denied access. Check the account permissions and database policies."
+                429 -> "Too many requests. Wait a moment and try again."
+                else -> "Supabase returned HTTP ${e.code}."
+            }
+            is java.net.UnknownHostException -> "The phone could not find the Supabase server. Check the URL and internet connection."
+            is java.net.ConnectException -> "The phone could not connect to the Supabase server."
+            is java.net.SocketTimeoutException -> "The Supabase request timed out."
+            is java.io.IOException -> "A network request failed."
+            else -> "The operation failed."
+        }
+        return "$summary\\nTechnical detail: ${detail.ifBlank { "No additional error details were provided." }}"
     }
     fun run(action: suspend () -> Unit) {
         if (busy) return
@@ -85,7 +103,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     LaunchedEffect(Unit) {
         if (backend.configured && callback == null) {
             busy = true
-            try { backend.restore()?.let { profile = it; screen = "home" } } catch (_: Exception) { message = "Could not restore your session. Please sign in." }
+            try { backend.restore()?.let { profile = it; screen = "home" } } catch (e: Exception) { message = "Could not restore your session. Please sign in.\\n${errorMessage(e)}" }
             finally { busy = false }
         }
     }
@@ -108,7 +126,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     message = if (incoming.first == "/google") "Google sign-in completed. Please sign in to continue." else "Email confirmed. Please sign in to continue."
                 }
             }
-        } catch (_: Exception) { screen = "login"; message = "This link could not be verified. Request a new link on this device." }
+        } catch (e: Exception) { screen = "login"; message = "The authentication link could not be verified.\\n${errorMessage(e)}" }
         finally { busy = false; clearCallback() }
     }
     BackHandler(enabled = screen != "welcome" && !busy) {
