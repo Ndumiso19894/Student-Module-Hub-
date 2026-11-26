@@ -3,8 +3,10 @@
 Native Kotlin + Jetpack Compose + Material 3 app, based on the Stage 3 project. The app uses the documented, community-maintained Supabase Kotlin client with a public project URL/publishable key. No secret key or service-role credential is included. Authentication, encrypted session storage and PKCE recovery code from Stage 3 are retained but have not been re-verified on a device in this stage.
 
 ## What is implemented
-- Student profile and live qualification → module → document-metadata browsing, with empty states. Actual PDFs are not connected.
-- Admin dashboard: read-only list of profiles (name, ID, role and creation date); create/edit/publish/unpublish qualifications, modules and document metadata; assign modules to qualifications, documents to modules; delete with confirmation.
+- Student catalogue browsing by UNISA college → qualification → module, with search at each browsing level.
+- Student material lists grouped into Study Guides, Tutorial Letters, Assignment Questions, Examination Question Papers, Examination Memorandums, Prescribed Books, Lecture Notes and Other Study Materials. Published PDFs are retrieved through the authenticated private Drive gateway and opened with an installed PDF reader.
+- Admin dashboard: read-only list of profiles; create/edit/publish qualifications, modules and material records; assign qualifications to colleges, modules to qualifications, and materials to modules; set qualification codes/levels and material categories; link PDFs from the configured private Google Drive folder.
+- The catalogue database now supports official qualification codes, levels, academic years, module credits/NQF levels/semester and source URLs. Existing records are preserved; qualification college assignments are nullable until an administrator classifies them.
 - SQL row-level security from Stage 3 restricts reads to published records and published parents for students, with admin access to catalogue management. Public signup trigger creates a `student` profile; clients cannot update `role`.
 - Applied Stage 4 migration prevents cascading deletion of modules/documents when a parent is deleted. Delete dependents explicitly first.
 - Student suspension, account editing and role management are deliberately not implemented in the app. This also prevents admins accidentally demoting their own account through the app. Student list does not expose email addresses from auth.users.
@@ -23,7 +25,8 @@ Before Google sign-in can work:
 This implementation opens Google's OAuth consent flow in the browser; it does not use the separate native Credential Manager button flow. Google sign-in has been added to source but is not yet build-verified or tested against the live provider.
 
 ## Verification results
-- The original Stage 4 baseline passed `testDebugUnitTest assembleDebug` before the latest authentication changes. The current revision contains nine unit tests for authentication form validation; these new tests have not yet been run because the uploaded repository is still missing `gradle/wrapper/gradle-wrapper.jar`.
+- The original Stage 4 baseline passed `testDebugUnitTest assembleDebug`. The catalogue changes have been committed and a GitHub Actions build-validation workflow has been added; the latest run still needs to complete before this revision can be called build-verified.
+- The repository does not include `gradle/wrapper/gradle-wrapper.jar`; the validation workflow installs Gradle 8.9 directly and runs `gradle testDebugUnitTest assembleDebug`.
 - The current authentication UI changes have not yet been built or tested on a physical Android device.
 - Migration `stage4_prevent_catalogue_cascade_deletes` was applied to the real project and verified: both FKs use ON DELETE RESTRICT.
 - Live database inspection: both role policies and RLS were present; profile role default is student; `authenticated` does not have UPDATE privilege on the role column.
@@ -56,7 +59,9 @@ returning p.id, p.role;
 6. Separate authenticated API/RLS negative tests still need to be run with separate student and admin sessions; UI hiding alone does not prove security.
 
 ## Database changes
-`backend/migrations/20261113_stage4_prevent_cascade.sql` was applied as Supabase migration `20261113111751`; do not rerun. `backend/schema.sql` describes the previous initial migration. Existing tables and policies were reused. No Drive integration was started.
+`backend/migrations/20261113_stage4_prevent_cascade.sql` was applied as Supabase migration `20261113111751`; do not rerun. `backend/migrations/20261126_unisa_catalogue_foundation.sql` is the new migration for the eight qualification-awarding colleges, qualification metadata, module metadata and controlled material categories. Apply this new migration once in the Supabase SQL Editor before opening the updated app. It preserves existing qualifications, modules, documents, Drive links and RLS permissions. The College of Graduate Studies is not listed as a qualification-awarding college because UNISA's 2026 rules explicitly state that qualifications are not awarded there.
+
+The migration creates the catalogue structure and seeds the eight colleges; it does not pretend to contain every qualification/module curriculum. Official qualification and module records still need to be imported/verified against the relevant UNISA 2027 qualification and registration curriculum pages before being published. UNISA official sources: https://www.unisa.ac.za/sites/corporate/default/Apply-for-admission/Undergraduate-qualifications/Qualifications and https://www.unisa.ac.za/sites/corporate/default/Apply-for-admission/Honours-degrees-%26-postgraduate-diplomas/Qualifications.
 
 ## Build
 JDK 17, Android SDK platform 35, Gradle wrapper 8.9: `./gradlew testDebugUnitTest assembleDebug`. The output is `app/build/outputs/apk/debug/app-debug.apk`. Public project configuration is in gradle.properties. This is a debug-signed APK, not a production release; production needs release signing, backups, monitoring, SMTP, comprehensive role tests, and independent security review.
