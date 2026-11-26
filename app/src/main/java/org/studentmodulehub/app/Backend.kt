@@ -118,7 +118,7 @@ class Backend(context: Context) {
         }.sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
     }
 
-    suspend fun scanDriveMaterials(limit: Int = 8): org.json.JSONObject =
+    suspend fun scanDriveMaterials(limit: Int = 20): org.json.JSONObject =
         importerRequest(org.json.JSONObject().put("action", "scan").put("limit", limit))
 
     suspend fun driveImportQueue(status: String = ""): List<DriveImportCandidate> {
