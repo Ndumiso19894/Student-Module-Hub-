@@ -57,14 +57,17 @@ async function googleAccessToken(): Promise<string> {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
-  if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
   try {
-    // Safe connectivity diagnostic: exposes no file names, IDs, or credentials.
-    // The Supabase Edge gateway still verifies the request JWT.
-    if (req.method === "POST") {
-      const incoming = await req.clone().json().catch(() => null);
-      if (incoming?.action === "diagnostic") {
+    // Safe connectivity diagnostic can be invoked with GET ?action=diagnostic
+    // or POST {"action":"diagnostic"} without a user session.
+    const diagnosticRequested =
+      req.method === "GET" && new URL(req.url).searchParams.get("action") === "diagnostic";
+    const incoming = req.method === "POST"
+      ? await req.clone().json().catch(() => null)
+      : null;
+
+    if (diagnosticRequested || incoming?.action === "diagnostic") {
         const folderId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
         if (!folderId) return json({ connected: false, stage: "configuration", error: "Drive folder is not configured." }, 503);
         const token = await googleAccessToken();
@@ -80,8 +83,9 @@ Deno.serve(async (req) => {
           return json({ connected: false, stage: "drive_folder", error: "Configured Drive ID is not a folder." }, 400);
         }
         return json({ connected: true, google_authentication: "ok", drive_folder_access: "ok" });
-      }
     }
+
+    if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
     const authHeader = req.headers.get("Authorization") ?? "";
     if (!authHeader.startsWith("Bearer ")) return json({ error: "Sign-in required." }, 401);
