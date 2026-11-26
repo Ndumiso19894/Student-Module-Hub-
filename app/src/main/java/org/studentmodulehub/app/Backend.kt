@@ -93,9 +93,16 @@ class Backend(context: Context) {
     suspend fun modules(qualificationId: String): List<Module> {
         require(qualificationId.matches(Regex("[0-9a-fA-F-]{36}")))
         val rows = JSONArray(client.from("modules").select { filter { eq("qualification_id", qualificationId) } }.data)
+        return parseModules(rows)
+    }
+    suspend fun allModules(): List<Module> {
+        val rows = JSONArray(client.from("modules").select().data)
+        return parseModules(rows)
+    }
+    private fun parseModules(rows: JSONArray): List<Module> {
         return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> Module(o.getString("id"), o.getString("title"), o.optString("code"), o.optString("description"), o.optBoolean("published"),
             if (o.isNull("credits")) null else o.optInt("credits"), if (o.isNull("nqf_level")) null else o.optInt("nqf_level"),
-            o.optString("semester"), if (o.isNull("academic_year")) null else o.optInt("academic_year"), o.optString("official_url")) } }.sortedBy { it.title }
+            o.optString("semester"), if (o.isNull("academic_year")) null else o.optInt("academic_year"), o.optString("official_url"), o.optString("qualification_id")) } }.sortedBy { it.title }
     }
     suspend fun documents(moduleId: String): List<Document> {
         val rows = JSONArray(client.from("documents").select { filter { eq("module_id", moduleId) } }.data)
@@ -229,7 +236,7 @@ data class DrivePdf(val id: String, val name: String, val sizeBytes: String, val
 data class StudentAccount(val id: String, val name: String, val role: String, val createdAt: String)
 data class Profile(val id: String, val name: String, val email: String, val role: String)
 data class Qualification(val id: String, val title: String, val description: String, val published: Boolean, val collegeId: String = "", val qualificationCode: String = "", val level: String = "", val academicYear: Int? = null, val officialUrl: String = "")
-data class Module(val id: String, val title: String, val code: String, val description: String, val published: Boolean, val credits: Int? = null, val nqfLevel: Int? = null, val semester: String = "", val academicYear: Int? = null, val officialUrl: String = "")
+data class Module(val id: String, val title: String, val code: String, val description: String, val published: Boolean, val credits: Int? = null, val nqfLevel: Int? = null, val semester: String = "", val academicYear: Int? = null, val officialUrl: String = "", val qualificationId: String = "")
 /** Encrypted session at rest; key stays in Android Keystore and backup is disabled. */
 private class SessionVault(context: Context) {
     private val prefs = context.getSharedPreferences("session", Context.MODE_PRIVATE)
