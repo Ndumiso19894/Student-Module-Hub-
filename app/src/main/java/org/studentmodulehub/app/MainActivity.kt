@@ -236,7 +236,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     val visibleQualifications = qualifications.filter { it.title.contains(catalogueSearch, ignoreCase=true) || it.qualificationCode.contains(catalogueSearch, ignoreCase=true) }
                     if (!busy && visibleQualifications.isEmpty()) Text("No qualifications found for this college.")
                     visibleQualifications.forEach { q ->
-                        val details = listOf(q.qualificationCode, q.level, q.description).filter { it.isNotBlank() }.joinToString(" · ")
+                        val details = listOf(q.qualificationCode, q.level, q.academicYear?.let { "Academic year $it" }.orEmpty(), q.description).filter { it.isNotBlank() }.joinToString(" · ")
                         HubCard(q.title + if (!q.published) " · Draft" else "", details, "View modules") { openModules(q) }
                     }
                     OutlinedButton(onClick = { go("colleges") }) { Text("Back to colleges") }
@@ -245,7 +245,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     PageHeader(qualification?.title ?: "Modules", "Modules in this qualification")
                     if (!busy && modules.isEmpty()) Text("No modules are available yet.")
                     OutlinedTextField(value=catalogueSearch, onValueChange={ catalogueSearch=it }, label={ Text("Search modules or module code") }, modifier=Modifier.fillMaxWidth(), singleLine=true)
-                    modules.filter { it.title.contains(catalogueSearch, ignoreCase=true) || it.code.contains(catalogueSearch, ignoreCase=true) }.forEach { m -> HubCard(m.title + if (!m.published) " · Draft" else "", listOf(m.code, m.description).filter { it.isNotBlank() }.joinToString(" · "), "View module") { selectedModule = m; go("moduleDetail"); documents = emptyList(); if (!demo) run { documents = backend.documents(m.id) } } }
+                    modules.filter { it.title.contains(catalogueSearch, ignoreCase=true) || it.code.contains(catalogueSearch, ignoreCase=true) }.forEach { m -> HubCard(m.title + if (!m.published) " · Draft" else "", listOf(m.code, m.credits?.let { "$it credits" }.orEmpty(), m.nqfLevel?.let { "NQF $it" }.orEmpty(), m.semester.takeIf { it.isNotBlank() }?.let { "Semester $it" }.orEmpty(), m.academicYear?.let { "Academic year $it" }.orEmpty(), m.description).filter { it.isNotBlank() }.joinToString(" · "), "View module") { selectedModule = m; go("moduleDetail"); documents = emptyList(); if (!demo) run { documents = backend.documents(m.id) } } }
                     OutlinedButton(onClick = { go("qualifications") }) { Text("Back to qualifications") }
                 }
                 "moduleDetail" -> {
@@ -257,7 +257,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                         val items = documents.filter { it.category == category }
                         if (items.isNotEmpty()) {
                             Text(category, style=MaterialTheme.typography.titleMedium, color=Teal)
-                            items.forEach { doc -> Card(modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) { Text(doc.title, style=MaterialTheme.typography.titleMedium); if (doc.description.isNotBlank()) Text(doc.description); Button(enabled=!busy && !demo, onClick={
+                            items.forEach { doc -> Card(modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) { Text(doc.title, style=MaterialTheme.typography.titleMedium); val academicDetails = listOf(doc.academicYear?.let { "Academic year $it" }.orEmpty(), doc.semester.takeIf { it.isNotBlank() }?.let { "Semester $it" }.orEmpty()).filter { it.isNotBlank() }.joinToString(" · "); if (academicDetails.isNotBlank()) Text(academicDetails, style=MaterialTheme.typography.bodySmall, color=Color.Gray); if (doc.description.isNotBlank()) Text(doc.description); Button(enabled=!busy && !demo, onClick={
                                 run {
                                     val folder = File(context.cacheDir, "study-materials").apply { mkdirs() }
                                     val safeName = doc.title.replace(Regex("[^A-Za-z0-9._-]"), "_").take(90).ifBlank { "study-material" } + ".pdf"
