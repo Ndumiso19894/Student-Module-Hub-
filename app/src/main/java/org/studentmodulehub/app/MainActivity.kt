@@ -259,11 +259,10 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                             Text(category, style=MaterialTheme.typography.titleMedium, color=Teal)
                             items.forEach { doc -> Card(modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) { Text(doc.title, style=MaterialTheme.typography.titleMedium); if (doc.description.isNotBlank()) Text(doc.description); Button(enabled=!busy && !demo, onClick={
                                 run {
-                                    val bytes = backend.downloadMaterial(doc.id)
                                     val folder = File(context.cacheDir, "study-materials").apply { mkdirs() }
                                     val safeName = doc.title.replace(Regex("[^A-Za-z0-9._-]"), "_").take(90).ifBlank { "study-material" } + ".pdf"
                                     val file = File(folder, safeName)
-                                    file.writeBytes(bytes)
+                                    backend.downloadMaterial(doc.id, file)
                                     val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
                                     val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                     context.startActivity(intent)
