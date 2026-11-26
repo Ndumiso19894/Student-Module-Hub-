@@ -22,7 +22,8 @@ import io.github.jan.supabase.postgrest.from
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import org.json.JSONArray\nimport kotlinx.coroutines.withContext
+import org.json.JSONArray
+import kotlinx.coroutines.withContext
 
 class Backend(context: Context) {
     val configured get() = BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_ANON_KEY.isNotBlank()
@@ -162,7 +163,8 @@ class Backend(context: Context) {
 
 }
 class BackendException(val code: Int): Exception("Service request failed (HTTP $code).")
-data class Document(val id: String, val title: String, val description: String, val published: Boolean)\ndata class DrivePdf(val id: String, val name: String, val sizeBytes: String, val modifiedAt: String)
+data class Document(val id: String, val title: String, val description: String, val published: Boolean)
+data class DrivePdf(val id: String, val name: String, val sizeBytes: String, val modifiedAt: String)
 data class StudentAccount(val id: String, val name: String, val role: String, val createdAt: String)
 data class Profile(val id: String, val name: String, val email: String, val role: String)
 data class Qualification(val id: String, val title: String, val description: String, val published: Boolean)
