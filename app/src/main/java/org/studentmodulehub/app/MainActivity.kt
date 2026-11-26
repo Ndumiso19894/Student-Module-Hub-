@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
     private var callback by mutableStateOf<Pair<String, String>?>(null)
     private fun receive(intent: Intent?) {
         val uri = intent?.data ?: return
-        if (uri.scheme == "org.studentmodulehub.app" && uri.host == "auth" && uri.path in listOf("/confirm", "/recovery")) {
+        if (uri.scheme == "org.studentmodulehub.app" && uri.host == "auth" && uri.path in listOf("/confirm", "/recovery", "/google")) {
             uri.getQueryParameter("code")?.let { callback = uri.path.orEmpty() to it }
         }
     }
@@ -99,12 +99,13 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                 val confirmedProfile = backend.restore()
                 if (confirmedProfile != null) {
                     profile = confirmedProfile
+                    demo = false
                     screen = "home"
-                    message = "Email confirmed. You are signed in."
+                    message = if (incoming.first == "/google") "Google sign-in successful." else "Email confirmed. You are signed in."
                 } else {
                     profile = null
                     screen = "login"
-                    message = "Email confirmed. Please sign in to continue."
+                    message = if (incoming.first == "/google") "Google sign-in completed. Please sign in to continue." else "Email confirmed. Please sign in to continue."
                 }
             }
         } catch (_: Exception) { screen = "login"; message = "This link could not be verified. Request a new link on this device." }
@@ -145,11 +146,18 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = { go("login") }, modifier = Modifier.fillMaxWidth(), enabled = !busy) { Text("Student sign in") }
                     OutlinedButton(onClick = { go("register") }, modifier = Modifier.fillMaxWidth(), enabled = !busy) { Text("Create an account") }
+                    OutlinedButton(onClick = {
+                        if (!backend.configured) message = "Google sign-in is not configured yet."
+                        else run { backend.signInWithGoogle() }
+                    }, modifier = Modifier.fillMaxWidth(), enabled = !busy) { Text("Continue with Google") }
                     TextButton(onClick = { demo = true; profile = null; go("home") }, modifier = Modifier.fillMaxWidth(), enabled = !busy) { Text("Explore sample screens") }
                     Text("Sample mode is for interface testing only. No account is created or signed in.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
                 "login" -> AuthScreen("Welcome back", "Sign in to continue your studies.", "Sign in", busy, false, onBack = { go("welcome") }, onSubmit = { _, email, pass ->
                     run { profile = backend.login(email, pass); demo = false; screen = "home" }
+                }, onGoogle = {
+                    if (!backend.configured) message = "Google sign-in is not configured yet."
+                    else run { backend.signInWithGoogle() }
                 }, onSecondary = { go("forgot") }, secondary = "Forgot password?")
                 "register" -> AuthScreen("Create account", "Start your learning journey.", "Create account", busy, true, onBack = { go("welcome") }, onSubmit = { name, email, pass ->
                     run {
@@ -164,6 +172,9 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                             message = "Registration submitted. Check your email for a confirmation link, then return here to sign in."
                         }
                     }
+                }, onGoogle = {
+                    if (!backend.configured) message = "Google sign-in is not configured yet."
+                    else run { backend.signInWithGoogle() }
                 }, onSecondary = { go("login") }, secondary = "Already have an account? Sign in")
                 "forgot" -> ForgotScreen(busy, onBack = { go("login") }, onSubmit = { email ->
                     run { backend.recover(email); message = "If the address is registered, recovery instructions will be sent. Open the link on this device to set a new password." }
@@ -241,7 +252,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
         }
     }
 }
-@Composable fun AuthScreen(title: String, subtitle: String, action: String, busy: Boolean, register: Boolean, onBack: () -> Unit, onSubmit: (String, String, String) -> Unit, onSecondary: () -> Unit, secondary: String) {
+@Composable fun AuthScreen(title: String, subtitle: String, action: String, busy: Boolean, register: Boolean, onBack: () -> Unit, onSubmit: (String, String, String) -> Unit, onGoogle: () -> Unit, onSecondary: () -> Unit, secondary: String) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -311,6 +322,8 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
         validation = Validation.auth(name, email, password, register, confirmPassword)
         if (validation.isEmpty()) onSubmit(name.trim(), email.trim(), password)
     }) { Text(action) }
+    Text("OR", modifier = Modifier.fillMaxWidth(), color = Color.Gray, style = MaterialTheme.typography.labelMedium)
+    OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = onGoogle) { Text("Continue with Google") }
     TextButton(enabled = !busy, onClick = onSecondary, modifier = Modifier.fillMaxWidth()) { Text(secondary) }
 }
 @Composable fun ForgotScreen(busy: Boolean, onBack: () -> Unit, onSubmit: (String) -> Unit) {
