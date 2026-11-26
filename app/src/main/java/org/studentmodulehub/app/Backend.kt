@@ -18,11 +18,16 @@ import io.github.jan.supabase.auth.user.UserSession
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.storage.Storage
+import io.github.jan.supabase.storage.storage
 import io.github.jan.supabase.postgrest.from
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.json.JSONArray
+import android.net.Uri
+import android.content.ContentResolver
+import android.provider.OpenableColumns
 
 class Backend(context: Context) {
     val configured get() = BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_ANON_KEY.isNotBlank()
@@ -35,6 +40,7 @@ class Backend(context: Context) {
     private val client = createSupabaseClient(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY) {
         install(Auth) { flowType = FlowType.PKCE; scheme = "org.studentmodulehub.app"; host = "auth"; sessionManager = this@Backend.sessionManager }
         install(Postgrest)
+        install(Storage)
     }
     private fun normalizeEmail(email: String): String = email.trim().lowercase(java.util.Locale.ROOT)
 
@@ -81,7 +87,41 @@ class Backend(context: Context) {
     }
     suspend fun documents(moduleId: String): List<Document> {
         val rows = JSONArray(client.from("documents").select { filter { eq("module_id", moduleId) } }.data)
-        return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> Document(o.getString("id"), o.getString("title"), o.optString("description"), o.optBoolean("published")) } }.sortedBy { it.title }
+        return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> Document(o.getString("id"), o.getString("title"), o.optString("description"), o.optBoolean("published"), o.optString("storage_path")) } }.sortedBy { it.title }
+    }
+    suspend fun uploadDocumentPdf(documentId: String, uri: Uri, resolver: ContentResolver) {
+        require(documentId.matches(Regex("[0-9a-fA-F-]{36}"))) { "Invalid document ID." }
+        val mime = resolver.getType(uri)
+        require(mime == "application/pdf" || mime == "application/x-pdf") { "Choose a PDF file." }
+        val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        } ?: "study-material.pdf"
+        val safeName = name.substringAfterLast('/').replace(Regex("[^A-Za-z0-9._-]"), "_").take(100).ifBlank { "study-material.pdf" }
+        val bytes = resolver.openInputStream(uri)?.use { input ->
+            val output = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(8192)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                require(total <= 25 * 1024 * 1024) { "PDF is larger than the 25 MB upload limit." }
+                output.write(buffer, 0, count)
+            }
+            output.toByteArray()
+        } ?: error("Could not read the selected PDF.")
+        require(bytes.isNotEmpty() && bytes.size >= 5 && String(bytes.copyOfRange(0, 5), Charsets.US_ASCII) == "%PDF-") { "The selected file is not a valid PDF." }
+        val path = "documents/$documentId/$safeName"
+        client.storage.from("study-materials").upload(path, bytes) { upsert = true }
+        client.from("documents").update({ set("storage_path", path) }) { filter { eq("id", documentId) } }
+    }
+    suspend fun downloadDocumentPdf(path: String): ByteArray {
+        require(path.matches(Regex("documents/[0-9a-fA-F-]{36}/[A-Za-z0-9._-]{1,100}"))) { "Invalid document file path." }
+        return client.storage.from("study-materials").downloadAuthenticated(path)
+    }
+    private suspend fun removeDocumentPdf(path: String) {
+        require(path.matches(Regex("documents/[0-9a-fA-F-]{36}/[A-Za-z0-9._-]{1,100}"))) { "Invalid document file path." }
+        client.storage.from("study-materials").delete(path)
     }
     suspend fun students(): List<StudentAccount> {
         val rows = JSONArray(client.from("profiles").select().data)
@@ -106,13 +146,17 @@ class Backend(context: Context) {
     }
     suspend fun deleteItem(table: String, id: String) {
         require(table in listOf("qualifications", "modules", "documents"))
+        if (table == "documents") {
+            val rows = JSONArray(client.from("documents").select { filter { eq("id", id) } }.data)
+            if (rows.length() == 1) rows.getJSONObject(0).optString("storage_path").takeIf { it.isNotBlank() }?.let { removeDocumentPdf(it) }
+        }
         val result = client.from(table).delete { filter { eq("id", id) }; select() }
         check(JSONArray(result.data).length() == 1) { "No record was deleted." }
     }
 
 }
 class BackendException(val code: Int): Exception("Service request failed (HTTP $code).")
-data class Document(val id: String, val title: String, val description: String, val published: Boolean)
+data class Document(val id: String, val title: String, val description: String, val published: Boolean, val storagePath: String = "")
 data class StudentAccount(val id: String, val name: String, val role: String, val createdAt: String)
 data class Profile(val id: String, val name: String, val email: String, val role: String)
 data class Qualification(val id: String, val title: String, val description: String, val published: Boolean)
