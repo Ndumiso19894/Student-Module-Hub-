@@ -35,17 +35,21 @@ class Backend(context: Context) {
         install(Auth) { flowType = FlowType.PKCE; scheme = "org.studentmodulehub.app"; host = "auth"; sessionManager = this@Backend.sessionManager }
         install(Postgrest)
     }
+    private fun normalizeEmail(email: String): String = email.trim().lowercase(java.util.Locale.ROOT)
+
     suspend fun login(email: String, password: String): Profile {
-        client.auth.signInWith(Email) { this.email = email.trim(); this.password = password }
+        client.auth.signInWith(Email) { this.email = normalizeEmail(email); this.password = password }
         return profileInternal()
     }
     suspend fun register(name: String, email: String, password: String) {
         client.auth.signUpWith(Email, redirectUrl = "org.studentmodulehub.app://auth/confirm") {
-            this.email = email.trim(); this.password = password
+            this.email = normalizeEmail(email); this.password = password
             data = buildJsonObject { put("display_name", name.trim()) }
         }
     }
-    suspend fun recover(email: String) { client.auth.resetPasswordForEmail(email.trim(), "org.studentmodulehub.app://auth/recovery") }
+    suspend fun recover(email: String) {
+        client.auth.resetPasswordForEmail(normalizeEmail(email), "org.studentmodulehub.app://auth/recovery")
+    }
     suspend fun completeCallback(code: String) { client.auth.exchangeCodeForSession(code) }
     suspend fun updatePassword(password: String) { client.auth.updateUser { this.password = password }; client.auth.signOut() }
     suspend fun restore(): Profile? {
