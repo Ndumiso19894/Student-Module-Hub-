@@ -65,19 +65,64 @@ async function driveList(token: string, folderId: string) {
   return files;
 }
 
-async function driveFullTextSearch(token: string, folderId: string, term: string) {
-  const safeTerm = term.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+async function driveFullTextSearchAny(token: string, folderId: string, terms: string[], targetFileId: string): Promise<boolean> {
+  if (!terms.length) return false;
+  const clauses = terms.map((term) => {
+    const safe = term.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    return "fullText contains '" + safe + "'";
+  });
   const params = new URLSearchParams({
-    q: "'" + folderId + "' in parents and trashed = false and fullText contains '" + safeTerm + "'",
+    q: "'" + folderId + "' in parents and trashed = false and (" + clauses.join(" or ") + ")",
     pageSize: "1000",
-    fields: "nextPageToken,files(id,name,mimeType,parents)",
+    fields: "nextPageToken,files(id)",
   });
-  const response = await fetch("https://www.googleapis.com/drive/v3/files?" + params, {
-    headers: { Authorization: "Bearer " + token },
-  });
-  if (!response.ok) throw new Error("Google Drive full-text search failed (HTTP " + response.status + ").");
-  const data = await response.json();
-  return data.files ?? [];
+  let pageToken = "";
+  do {
+    if (pageToken) params.set("pageToken", pageToken);
+    const response = await fetch("https://www.googleapis.com/drive/v3/files?" + params, {
+      headers: { Authorization: "Bearer " + token },
+    });
+    if (!response.ok) throw new Error("Google Drive indexed-text search failed (HTTP " + response.status + ").");
+    const data = await response.json();
+    if ((data.files ?? []).some((file: any) => file.id === targetFileId)) return true;
+    pageToken = data.nextPageToken ?? "";
+  } while (pageToken);
+  return false;
+}
+
+async function findIndexedModuleCode(token: string, folderId: string, fileId: string, modules: any[]): Promise<string | null> {
+  const uniqueCodes = [...new Set(modules.map((m) => String(m.code ?? "").trim().toUpperCase()).filter((code) => /^[A-Z0-9-]{4,20}$/.test(code)))];
+  const batchSize = 100;
+  for (let start = 0; start < uniqueCodes.length; start += batchSize) {
+    const batch = uniqueCodes.slice(start, start + batchSize);
+    if (!await driveFullTextSearchAny(token, folderId, batch, fileId)) continue;
+    let candidates = batch;
+    while (candidates.length > 1) {
+      const middle = Math.ceil(candidates.length / 2);
+      const left = candidates.slice(0, middle);
+      if (await driveFullTextSearchAny(token, folderId, left, fileId)) candidates = left;
+      else candidates = candidates.slice(middle);
+    }
+    return candidates[0] ?? null;
+  }
+  return null;
+}
+
+async function findIndexedCategories(token: string, folderId: string, fileId: string) {
+  const probes = [
+    { name: "Tutorial Letters", terms: ["tutorial"] },
+    { name: "Assignment Questions", terms: ["assignment"] },
+    { name: "Examination Memorandums", terms: ["memorandum", "memo"] },
+    { name: "Examination Question Papers", terms: ["examination", "exam"] },
+    { name: "Study Guides", terms: ["study", "guide"] },
+    { name: "Prescribed Books", terms: ["textbook", "prescribed"] },
+    { name: "Lecture Notes", terms: ["lecture"] },
+  ];
+  const matches: string[] = [];
+  for (const probe of probes) {
+    if (await driveFullTextSearchAny(token, folderId, probe.terms, fileId)) matches.push(probe.name);
+  }
+  return matches;
 }
 
 async function driveInventory(token: string, rootId: string) {
@@ -104,40 +149,7 @@ async function driveInventory(token: string, rootId: string) {
   return { pdfs, totalFiles, foldersVisited: visited.size, mimeCounts };
 }
 
-async function driveOcrPdfText(token: string, fileId: string): Promise<string> {
-  let temporaryDocId = "";
-  try {
-    const copyUrl = "https://www.googleapis.com/drive/v2/files/" + encodeURIComponent(fileId) +
-      "/copy?convert=true&ocr=true&ocrLanguage=en";
-    const copied = await fetch(copyUrl, {
-      method: "POST",
-      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "__STUDENT_MODULE_HUB_OCR_TEMP__" + fileId + "__" + Date.now() }),
-    });
-    if (!copied.ok) {
-      const detail = await copied.text().catch(() => "");
-      throw new Error("Google Drive OCR conversion failed (HTTP " + copied.status + "): " + detail.slice(0, 500));
-    }
-    const temp = await copied.json();
-    temporaryDocId = String(temp.id ?? "");
-    if (!temporaryDocId) throw new Error("Google Drive OCR did not return a temporary document.");
-    const exported = await fetch(
-      "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(temporaryDocId) +
-        "/export?mimeType=text%2Fplain",
-      { headers: { Authorization: "Bearer " + token } },
-    );
-    if (!exported.ok) throw new Error("Could not read the OCR text from Google Drive.");
-    return (await exported.text()).slice(0, 120000);
-  } finally {
-    if (temporaryDocId) {
-      await fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(temporaryDocId), {
-        method: "DELETE", headers: { Authorization: "Bearer " + token },
-      }).catch(() => undefined);
-    }
-  }
-}
-
-async function extractPdfText(token: string, fileId: string): Promise<{ text: string; pages: number; ocrUsed: boolean }> {
+async function extractPdfText(token: string, fileId: string): Promise<{ text: string; pages: number }> {
   const response = await fetch(
     "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?alt=media",
     { headers: { Authorization: "Bearer " + token } },
@@ -160,14 +172,8 @@ async function extractPdfText(token: string, fileId: string): Promise<{ text: st
     ).join(""));
   }
   await doc.destroy();
-  let text = pieces.join("\n").slice(0, 120000);
-  let ocrUsed = false;
-  if (text.replace(/\s/g, "").length < 150) {
-    const ocrText = await driveOcrPdfText(token, fileId);
-    if (ocrText.trim().length > text.trim().length) text = ocrText;
-    ocrUsed = true;
-  }
-  return { text, pages, ocrUsed };
+  const text = pieces.join("\n").slice(0, 120000);
+  return { text, pages };
 }
 
 const categories = [
@@ -270,17 +276,35 @@ Deno.serve(async (req) => {
       for (const file of batch) {
         let extracted = "";
         let pageCount = 0;
-        let ocrUsed = false;
+        let indexedSearchUsed = false;
         let parseError = "";
         try {
           const parsed = await extractPdfText(token, file.id);
           extracted = parsed.text;
           pageCount = parsed.pages;
-          ocrUsed = parsed.ocrUsed;
         } catch (error) {
           parseError = error instanceof Error ? error.message : "PDF text extraction failed.";
         }
-        const found = identify(extracted, modules ?? []);
+        let found = identify(extracted, modules ?? []);
+        if (!parseError && found.codeGroups.length === 0) {
+          indexedSearchUsed = true;
+          const indexedCode = await findIndexedModuleCode(token, file.parents?.[0] ?? rootId, file.id, modules ?? []);
+          if (indexedCode) {
+            found = identify(extracted + "\\n" + indexedCode, modules ?? []);
+            found.evidence.push({ type: "drive_ocr_index", value: indexedCode });
+          }
+        }
+        if (!parseError && found.codeGroups.length === 1 && found.categoryMatches.length === 0) {
+          const indexedCategories = await findIndexedCategories(token, file.parents?.[0] ?? rootId, file.id);
+          if (indexedCategories.length === 1) {
+            found.category = indexedCategories[0];
+            found.categoryMatches = [{ name: indexedCategories[0] }];
+            found.confidence = Math.min(0.94, found.confidence);
+            found.evidence.push({ type: "drive_ocr_category_index", value: indexedCategories[0] });
+          } else if (indexedCategories.length > 1) {
+            found.evidence.push({ type: "drive_ocr_category_ambiguous", value: indexedCategories });
+          }
+        }
         const status = parseError || found.codeGroups.length === 0 ? "unclassified" :
           found.confidence >= 0.95 ? "pending" : "needs_review";
         const { data: saved, error: saveError } = await admin.from("drive_import_candidates").upsert({
@@ -294,7 +318,7 @@ Deno.serve(async (req) => {
           suggested_module_id: found.module?.id ?? null,
           suggested_category: found.category,
           confidence: found.confidence,
-          evidence: [...found.evidence, ...(parseError ? [{ type: "extraction_issue", value: parseError }] : []), { type: "pdf_pages_read", value: Math.min(pageCount, 12) }, { type: "ocr_used", value: ocrUsed }],
+          evidence: [...found.evidence, ...(parseError ? [{ type: "extraction_issue", value: parseError }] : []), { type: "pdf_pages_read", value: Math.min(pageCount, 12) }, { type: "drive_index_search_used", value: indexedSearchUsed }],
           status,
           last_scanned_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -312,7 +336,7 @@ Deno.serve(async (req) => {
         remaining_unscanned: Math.max(0, pending.length - batch.length),
         scheduled: isScheduledRun,
         results,
-        note: "Every nested folder is inventoried. PDFs are identified by their contents; image-only PDFs use Google Drive OCR. Non-PDF files are inventoried but are not yet importable as app materials.",
+        note: "Every nested folder is inventoried. Text PDFs use direct extraction; when text is missing, matching uses Google Drive's indexed document text, which includes OCR for supported PDFs and images. Non-PDF files are inventoried but are not yet importable as app materials.",
       });
     }
 
