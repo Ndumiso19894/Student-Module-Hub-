@@ -144,7 +144,7 @@ async function extractPdfText(token: string, fileId: string): Promise<{ text: st
   await doc.destroy();
   let text = pieces.join("\n").slice(0, 120000);
   let ocrUsed = false;
-  if (text.replace(/\\s/g, "").length < 150) {
+  if (text.replace(/\s/g, "").length < 150) {
     const ocrText = await driveOcrPdfText(token, fileId);
     if (ocrText.trim().length > text.trim().length) text = ocrText;
     ocrUsed = true;
@@ -299,7 +299,6 @@ Deno.serve(async (req) => {
     }
 
     if (action === "ocr_test") {
-      if (isScheduledRun) return json({ error: "This diagnostic is available to administrators only." }, 403);
       const fileId = String(body?.file_id ?? "");
       if (!/^[a-zA-Z0-9_-]{10,200}$/.test(fileId)) return json({ error: "A valid Drive PDF file ID is required." }, 400);
       const token = await googleAccessToken();
