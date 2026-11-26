@@ -146,3 +146,14 @@ Imported and committed as `backend/seeds/unisa_verified_module_curricula_2026_ba
 The live database now contains **479 module rows**, of which **478 are curriculum-linked across fourteen qualifications/streams**; one earlier module row is pre-existing test data. Batch 6 adds 33 records. Credits and semester periods remain blank where the qualification curriculum page does not specify them. Duplicate qualification/module-code keys are checked after import.
 
 Source: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Commerce-in-Business-Informatics-%2898300-%E2%80%93-BIS%29
+
+
+## Additional verified 2026 curriculum — batch 7
+
+Added the qualification record and imported the following curriculum, committed as `backend/seeds/unisa_verified_module_curricula_2026_batch_7.sql`:
+
+- **Bachelor of Commerce Honours in Business Informatics (98450): 15 module options**. The two compulsory modules, two-of-five information systems options and two-of-seven business/elective options are represented separately, with the research report prerequisite retained.
+
+The live database now contains **494 module rows**, of which **493 are curriculum-linked across fifteen qualifications/streams**; one earlier module row is pre-existing test data. The qualification catalogue now has **341 records**. Credits and semester periods are blank where the official page does not provide per-module values.
+
+Source: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Commerce-Honours-in-Business-Informatics-%2898450%29
