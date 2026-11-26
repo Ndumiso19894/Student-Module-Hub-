@@ -22,6 +22,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
+import java.io.File
 import kotlinx.coroutines.launch
 
 private val Navy = Color(0xFF142A40)
@@ -143,12 +146,14 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
             "resetPassword" -> { run { backend.logout(); profile = null; screen = "login" } }
             "modules" -> go("qualifications")
             "moduleDetail" -> go("modules")
-            "qualifications", "profile", "admin" -> go("home")
+            "qualifications" -> go("colleges")
+            "colleges", "profile", "admin" -> go("home")
             "home" -> if (demo) { demo = false; go("welcome") } else go("profile")
             else -> go("welcome")
         }
     }
     var selectedModule by remember { mutableStateOf<Module?>(null) }
+    val context = LocalContext.current
     Scaffold(containerColor = Pale, topBar = {
         if (screen !in listOf("welcome", "login", "register", "forgot", "resetPassword")) {
             CenterAlignedTopAppBar(
@@ -215,7 +220,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     HubCard("Explore qualifications", "Find your programme and browse its modules.", "Browse qualifications", ::openQualifications)
                     HubCard("Your profile", "View your account information and role.", "View profile", { go("profile") })
                     if (!demo && profile?.role == "admin") HubCard("Administrator", "Access the administration foundation.", "Open dashboard", { go("admin") })
-                    Text("Documents are listed where published. Downloads will be added later.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Text("Browse the UNISA catalogue by college, qualification and module.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
                 "colleges" -> {
                     PageHeader("UNISA colleges", "Choose a college to browse its qualifications.")
@@ -252,7 +257,18 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                         val items = documents.filter { it.category == category }
                         if (items.isNotEmpty()) {
                             Text(category, style=MaterialTheme.typography.titleMedium, color=Teal)
-                            items.forEach { doc -> Card(modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(doc.title, style=MaterialTheme.typography.titleMedium); if (doc.description.isNotBlank()) Text(doc.description); Text("Material file access is not yet available in the student view.", style=MaterialTheme.typography.bodySmall, color=Color.Gray) } } }
+                            items.forEach { doc -> Card(modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) { Text(doc.title, style=MaterialTheme.typography.titleMedium); if (doc.description.isNotBlank()) Text(doc.description); Button(enabled=!busy && !demo, onClick={
+                                run {
+                                    val bytes = backend.downloadMaterial(doc.id)
+                                    val folder = File(context.cacheDir, "study-materials").apply { mkdirs() }
+                                    val safeName = doc.title.replace(Regex("[^A-Za-z0-9._-]"), "_").take(90).ifBlank { "study-material" } + ".pdf"
+                                    val file = File(folder, safeName)
+                                    file.writeBytes(bytes)
+                                    val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+                                    val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    context.startActivity(intent)
+                                }
+                            }) { Text("Open PDF") } } } }
                         }
                     }
                     OutlinedButton(onClick = { go("modules") }) { Text("Back to modules") }
