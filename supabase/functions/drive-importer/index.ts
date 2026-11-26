@@ -65,10 +65,12 @@ async function driveList(token: string, folderId: string) {
   return files;
 }
 
-async function allPdfs(token: string, rootId: string) {
+async function driveInventory(token: string, rootId: string) {
   const queue = [rootId];
   const visited = new Set<string>();
-  const result: any[] = [];
+  const pdfs: any[] = [];
+  const mimeCounts: Record<string, number> = {};
+  let totalFiles = 0;
   while (queue.length && visited.size < 5000) {
     const folder = queue.shift()!;
     if (visited.has(folder)) continue;
@@ -76,10 +78,15 @@ async function allPdfs(token: string, rootId: string) {
     const children = await driveList(token, folder);
     for (const item of children) {
       if (item.mimeType === "application/vnd.google-apps.folder") queue.push(item.id);
-      else if (item.mimeType === "application/pdf") result.push(item);
+      else {
+        totalFiles++;
+        const mime = item.mimeType || "unknown";
+        mimeCounts[mime] = (mimeCounts[mime] || 0) + 1;
+        if (mime === "application/pdf") pdfs.push(item);
+      }
     }
   }
-  return result;
+  return { pdfs, totalFiles, foldersVisited: visited.size, mimeCounts };
 }
 
 async function driveOcrPdfText(token: string, fileId: string): Promise<string> {
@@ -130,7 +137,9 @@ async function extractPdfText(token: string, fileId: string): Promise<{ text: st
   for (let n = 1; n <= pagesToRead; n++) {
     const page = await doc.getPage(n);
     const content = await page.getTextContent();
-    pieces.push(content.items.map((item: any) => typeof item.str === "string" ? item.str : "").join(" "));
+    pieces.push(content.items.map((item: any) =>
+      (typeof item.str === "string" ? item.str : "") + (item.hasEOL ? "\n" : " ")
+    ).join(""));
   }
   await doc.destroy();
   let text = pieces.join("\n").slice(0, 120000);
@@ -154,13 +163,13 @@ const categories = [
 ];
 
 function inferTitle(text: string, fileName: string): string {
-  const cleaned = text.replace(/[\\t\\r]+/g, " ").split(/\\n+/)
-    .map((line) => line.replace(/\\s+/g, " ").trim())
+  const cleaned = text.split(/\n+/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
     .filter((line) => line.length >= 8 && line.length <= 180);
   const useful = cleaned.find((line) =>
     !/^([A-Z]{2,}[0-9]{3,}|UNISA|UNIVERSITY OF SOUTH AFRICA|ASSIGNMENT [0-9]+)/i.test(line)
   );
-  return (useful ?? fileName.replace(/\\.pdf$/i, "")).slice(0, 240);
+  return (useful ?? fileName.replace(/\.pdf$/i, "")).slice(0, 240);
 }
 
 function identify(text: string, modules: any[]) {
@@ -168,17 +177,30 @@ function identify(text: string, modules: any[]) {
   const matches = modules.filter((m) => {
     const code = String(m.code ?? "").trim().toUpperCase();
     if (!code || code.length < 4) return false;
-    return new RegExp("(^|[^A-Z0-9])" + code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^A-Z0-9]|$)").test(upper);
+    const escapedCode = code.replace(/[^A-Z0-9]/g, "\\$&");
+    return new RegExp("(^|[^A-Z0-9])" + escapedCode + "([^A-Z0-9]|$)").test(upper);
   });
+  const byCode = new Map<string, any[]>();
+  for (const match of matches) {
+    const code = String(match.code).trim().toUpperCase();
+    byCode.set(code, [...(byCode.get(code) ?? []), match]);
+  }
+  const codeGroups = [...byCode.entries()];
+  const chosenGroup = codeGroups.length === 1
+    ? [...codeGroups[0][1]].sort((a, b) => String(b.title ?? "").length - String(a.title ?? "").length)
+    : [];
+  const chosenModule = chosenGroup[0] ?? null;
   const categoryMatches = categories.filter((c) => c.terms.some((term) => upper.includes(term.toUpperCase())));
   const category = categoryMatches.length === 1 ? categoryMatches[0].name : "Other Study Materials";
-  let confidence = matches.length === 1 ? 0.98 : matches.length > 1 ? 0.55 : 0;
-  if (matches.length === 1 && categoryMatches.length === 1) confidence = 0.995;
+  let confidence = codeGroups.length === 1
+    ? (chosenGroup.length === 1 ? 0.98 : 0.90)
+    : codeGroups.length > 1 ? 0.55 : 0;
+  if (codeGroups.length === 1 && chosenGroup.length === 1 && categoryMatches.length === 1) confidence = 0.995;
   const evidence = [
     ...matches.map((m) => ({ type: "module_code", value: m.code, module_title: m.title })),
     ...categoryMatches.map((c) => ({ type: "category_terms", value: c.name })),
   ];
-  return { module: matches.length === 1 ? matches[0] : null, matches, category, confidence, evidence };
+  return { module: chosenModule, matches, codeGroups, categoryMatches, category, confidence, evidence };
 }
 
 Deno.serve(async (req) => {
@@ -215,7 +237,8 @@ Deno.serve(async (req) => {
       const rootId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
       if (!rootId) return json({ error: "Drive folder is not configured." }, 503);
       const token = await googleAccessToken();
-      const files = await allPdfs(token, rootId);
+      const inventory = await driveInventory(token, rootId);
+      const files = inventory.pdfs;
       const { data: modules, error: moduleError } = await admin.from("modules").select("id,code,title");
       if (moduleError) throw new Error("Could not load the module catalogue.");
       const { data: existing, error: existingError } = await admin.from("drive_import_candidates").select("drive_file_id,status");
@@ -240,7 +263,7 @@ Deno.serve(async (req) => {
           parseError = error instanceof Error ? error.message : "PDF text extraction failed.";
         }
         const found = identify(extracted, modules ?? []);
-        const status = parseError || !found.module ? "unclassified" :
+        const status = parseError || found.codeGroups.length === 0 ? "unclassified" :
           found.confidence >= 0.95 ? "pending" : "needs_review";
         const { data: saved, error: saveError } = await admin.from("drive_import_candidates").upsert({
           drive_file_id: file.id,
@@ -264,11 +287,24 @@ Deno.serve(async (req) => {
       return json({
         scanned: results.length,
         total_pdfs_found: files.length,
+        total_files_found: inventory.totalFiles,
+        folders_scanned: inventory.foldersVisited,
+        non_pdf_files: inventory.totalFiles - files.length,
+        file_types_found: inventory.mimeCounts,
         remaining_unscanned: Math.max(0, pending.length - batch.length),
         scheduled: isScheduledRun,
         results,
-        note: "Nested folders are scanned recursively. Text-based PDFs use text extraction; image-only PDFs use Google Drive OCR.",
+        note: "Every nested folder is inventoried. PDFs are identified by their contents; image-only PDFs use Google Drive OCR. Non-PDF files are inventoried but are not yet importable as app materials.",
       });
+    }
+
+    if (action === "ocr_test") {
+      if (isScheduledRun) return json({ error: "This diagnostic is available to administrators only." }, 403);
+      const fileId = String(body?.file_id ?? "");
+      if (!/^[a-zA-Z0-9_-]{10,200}$/.test(fileId)) return json({ error: "A valid Drive PDF file ID is required." }, 400);
+      const token = await googleAccessToken();
+      const text = await driveOcrPdfText(token, fileId);
+      return json({ ocr_enabled: true, characters_extracted: text.length, preview: text.slice(0, 1200) });
     }
 
     if (action === "queue") {
