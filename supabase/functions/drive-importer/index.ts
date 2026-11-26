@@ -132,37 +132,42 @@ async function driveInventory(token: string, rootId: string) {
   const mimeCounts: Record<string, number> = {};
   let totalFiles = 0;
   while (queue.length && visited.size < 5000) {
-    const folder = queue.shift()!;
-    if (visited.has(folder)) continue;
-    visited.add(folder);
-    const children = await driveList(token, folder);
-    for (const item of children) {
-      if (item.mimeType === "application/vnd.google-apps.folder") {
-        queue.push(item.id);
-      } else if (item.mimeType === "application/vnd.google-apps.shortcut") {
-        const targetId = item.shortcutDetails?.targetId;
-        const targetMime = item.shortcutDetails?.targetMimeType;
-        if (targetId && targetMime === "application/vnd.google-apps.folder") {
-          queue.push(targetId);
-        } else if (targetId && targetMime === "application/pdf") {
-          const targetResponse = await fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(targetId) + "?fields=id,name,mimeType,size,modifiedTime,parents", {
-            headers: { Authorization: "Bearer " + token },
-          });
-          if (targetResponse.ok) {
-            const target = await targetResponse.json();
+    const batch: string[] = [];
+    while (queue.length && batch.length < 5 && visited.size + batch.length < 5000) {
+      const next = queue.shift()!;
+      if (!visited.has(next) && !batch.includes(next)) batch.push(next);
+    }
+    batch.forEach((folder) => visited.add(folder));
+    const pages = await Promise.all(batch.map((folder) => driveList(token, folder)));
+    for (const children of pages) {
+      for (const item of children) {
+        if (item.mimeType === "application/vnd.google-apps.folder") {
+          if (!visited.has(item.id)) queue.push(item.id);
+        } else if (item.mimeType === "application/vnd.google-apps.shortcut") {
+          const targetId = item.shortcutDetails?.targetId;
+          const targetMime = item.shortcutDetails?.targetMimeType;
+          if (targetId && targetMime === "application/vnd.google-apps.folder") {
+            if (!visited.has(targetId)) queue.push(targetId);
+          } else if (targetId && targetMime === "application/pdf") {
+            const targetResponse = await fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(targetId) + "?fields=id,name,mimeType,size,modifiedTime,parents", {
+              headers: { Authorization: "Bearer " + token },
+            });
+            if (targetResponse.ok) {
+              const target = await targetResponse.json();
+              totalFiles++;
+              mimeCounts["application/pdf"] = (mimeCounts["application/pdf"] || 0) + 1;
+              pdfs.push({ ...target, name: item.name || target.name });
+            }
+          } else {
             totalFiles++;
-            mimeCounts["application/pdf"] = (mimeCounts["application/pdf"] || 0) + 1;
-            pdfs.push({ ...target, name: item.name || target.name });
+            mimeCounts[item.mimeType] = (mimeCounts[item.mimeType] || 0) + 1;
           }
         } else {
           totalFiles++;
-          mimeCounts[item.mimeType] = (mimeCounts[item.mimeType] || 0) + 1;
+          const mime = item.mimeType || "unknown";
+          mimeCounts[mime] = (mimeCounts[mime] || 0) + 1;
+          if (mime === "application/pdf") pdfs.push(item);
         }
-      } else {
-        totalFiles++;
-        const mime = item.mimeType || "unknown";
-        mimeCounts[mime] = (mimeCounts[mime] || 0) + 1;
-        if (mime === "application/pdf") pdfs.push(item);
       }
     }
   }
