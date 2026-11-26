@@ -265,7 +265,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                             Text("FIND YOUR NEXT RESOURCE", color = Color(0xFFB8D1FF), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                             Text("Search the UNISA catalogue", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                             Text("Look up colleges, qualifications, module codes and study materials.", color = Color(0xFFE2E8F0))
-                            Button(onClick = ::openSearch, colors = ButtonDefaults.buttonColors(containerColor = Blue)) { Text("⌕  Search catalogue") }
+                            Button(onClick = ::openSearch, colors = ButtonDefaults.buttonColors(containerColor = Blue)) { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Icon(Icons.Filled.Search, contentDescription = null); Text("Search catalogue") } }
                         }
                     }
                     Text("QUICK ACCESS", color = Blue, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
@@ -435,8 +435,14 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
 @Composable fun HomeTile(title: String, subtitle: String, symbol: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Card(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.size(40.dp).background(Color(0xFFEAF0FF), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
-                Text(symbol, color = Blue, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Box(Modifier.size(42.dp).background(Color(0xFFEAF0FF), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
+                val tileIcon = when (symbol) {
+                    "▦" -> Icons.Filled.School
+                    "●" -> Icons.Filled.Person
+                    "↓" -> Icons.Filled.Download
+                    else -> Icons.Filled.Search
+                }
+                Icon(tileIcon, contentDescription = null, tint = Blue)
             }
             Text(title, color = Navy, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall)
