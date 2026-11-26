@@ -22,7 +22,7 @@ import io.github.jan.supabase.postgrest.from
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import org.json.JSONArray
+import org.json.JSONArray\nimport kotlinx.coroutines.withContext
 
 class Backend(context: Context) {
     val configured get() = BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_ANON_KEY.isNotBlank()
@@ -83,6 +83,56 @@ class Backend(context: Context) {
         val rows = JSONArray(client.from("documents").select { filter { eq("module_id", moduleId) } }.data)
         return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> Document(o.getString("id"), o.getString("title"), o.optString("description"), o.optBoolean("published")) } }.sortedBy { it.title }
     }
+    suspend fun drivePdfs(): List<DrivePdf> = driveRequest(org.json.JSONObject().put("action", "list")).let { response ->
+        val files = response.optJSONArray("files") ?: JSONArray()
+        (0 until files.length()).map { index ->
+            files.getJSONObject(index).let { file ->
+                DrivePdf(file.getString("id"), file.getString("name"), file.optString("size"), file.optString("modifiedTime"))
+            }
+        }.sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
+    }
+
+    suspend fun linkDrivePdf(documentId: String, fileId: String) {
+        require(documentId.matches(Regex("[0-9a-fA-F-]{36}")))
+        require(fileId.matches(Regex("[a-zA-Z0-9_-]{10,200}")))
+        val response = driveRequest(org.json.JSONObject()
+            .put("action", "link")
+            .put("document_id", documentId)
+            .put("file_id", fileId))
+        check(response.optBoolean("linked")) { "The PDF could not be linked." }
+    }
+
+    private suspend fun driveRequest(payload: org.json.JSONObject): org.json.JSONObject {
+        val accessToken = client.auth.currentSessionOrNull()?.accessToken
+            ?: throw java.io.IOException("Your session has expired. Sign in again.")
+        return withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val connection = java.net.URL("${BuildConfig.SUPABASE_URL}/functions/v1/drive-materials")
+                .openConnection() as java.net.HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 20000
+                connection.readTimeout = 30000
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
+                connection.setRequestProperty("Authorization", "Bearer $accessToken")
+                connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                val status = connection.responseCode
+                val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+                val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                val result = try { org.json.JSONObject(body) } catch (_: Exception) {
+                    throw java.io.IOException("The materials service returned an unreadable response.")
+                }
+                if (status !in 200..299) {
+                    throw java.io.IOException(result.optString("error").ifBlank { "Materials request failed (HTTP $status)." })
+                }
+                result
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
     suspend fun students(): List<StudentAccount> {
         val rows = JSONArray(client.from("profiles").select().data)
         return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> StudentAccount(o.getString("id"), o.optString("display_name"), o.optString("role"), o.optString("created_at")) } }.sortedBy { it.name }
@@ -112,7 +162,7 @@ class Backend(context: Context) {
 
 }
 class BackendException(val code: Int): Exception("Service request failed (HTTP $code).")
-data class Document(val id: String, val title: String, val description: String, val published: Boolean)
+data class Document(val id: String, val title: String, val description: String, val published: Boolean)\ndata class DrivePdf(val id: String, val name: String, val sizeBytes: String, val modifiedAt: String)
 data class StudentAccount(val id: String, val name: String, val role: String, val createdAt: String)
 data class Profile(val id: String, val name: String, val email: String, val role: String)
 data class Qualification(val id: String, val title: String, val description: String, val published: Boolean)
