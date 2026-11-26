@@ -118,6 +118,63 @@ class Backend(context: Context) {
         }.sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
     }
 
+    suspend fun scanDriveMaterials(limit: Int = 8): org.json.JSONObject =
+        importerRequest(org.json.JSONObject().put("action", "scan").put("limit", limit))
+
+    suspend fun driveImportQueue(status: String = ""): List<DriveImportCandidate> {
+        val response = importerRequest(org.json.JSONObject().put("action", "queue").put("status", status))
+        val rows = response.optJSONArray("candidates") ?: JSONArray()
+        return (0 until rows.length()).map { index ->
+            val item = rows.getJSONObject(index)
+            val module = item.optJSONObject("module")
+            DriveImportCandidate(
+                item.getString("id"), item.optString("file_name"), item.optString("suggested_module_id"),
+                module?.optString("title").orEmpty(), module?.optString("code").orEmpty(),
+                item.optString("suggested_category", "Other Study Materials"),
+                item.optDouble("confidence", 0.0), item.optString("status"),
+                item.optJSONArray("evidence")?.toString().orEmpty()
+            )
+        }
+    }
+
+    suspend fun approveDriveCandidate(candidateId: String, moduleId: String, category: String) {
+        val result = importerRequest(org.json.JSONObject().put("action", "approve")
+            .put("candidate_id", candidateId).put("module_id", moduleId).put("category", category))
+        check(result.optBoolean("imported")) { "The PDF could not be imported." }
+    }
+
+    suspend fun rejectDriveCandidate(candidateId: String) {
+        val result = importerRequest(org.json.JSONObject().put("action", "reject").put("candidate_id", candidateId))
+        check(result.optBoolean("rejected")) { "The candidate could not be rejected." }
+    }
+
+    private suspend fun importerRequest(payload: org.json.JSONObject): org.json.JSONObject {
+        val accessToken = client.auth.currentSessionOrNull()?.accessToken
+            ?: throw java.io.IOException("Your session has expired. Sign in again.")
+        return withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val connection = java.net.URL("${BuildConfig.SUPABASE_URL}/functions/v1/drive-importer")
+                .openConnection() as java.net.HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 20000
+                connection.readTimeout = 120000
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
+                connection.setRequestProperty("Authorization", "Bearer $accessToken")
+                connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                val status = connection.responseCode
+                val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+                val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                val result = try { org.json.JSONObject(body) } catch (_: Exception) {
+                    throw java.io.IOException("The importer returned an unreadable response.")
+                }
+                if (status !in 200..299) throw java.io.IOException(result.optString("error").ifBlank { "Importer failed (HTTP $status)." })
+                result
+            } finally { connection.disconnect() }
+        }
+    }
+
     suspend fun linkDrivePdf(documentId: String, fileId: String) {
         require(documentId.matches(Regex("[0-9a-fA-F-]{36}")))
         require(fileId.matches(Regex("[a-zA-Z0-9_-]{10,200}")))
@@ -263,3 +320,7 @@ private class SessionVault(context: Context) {
     }
     fun clear() { prefs.edit().clear().commit() }
 }
+data class DriveImportCandidate(
+    val id: String, val fileName: String, val suggestedModuleId: String, val moduleTitle: String,
+    val moduleCode: String, val category: String, val confidence: Double, val status: String, val evidence: String
+)
