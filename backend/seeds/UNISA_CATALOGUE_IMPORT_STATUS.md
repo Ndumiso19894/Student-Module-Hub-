@@ -81,3 +81,21 @@ The 2027 BA Honours in Corrections Management page says updated registration/cur
 - Undergraduate registration finder: https://www.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules
 - UNISA 2026 student rules: https://www.unisa.ac.za/static/myunisa/Content/Learner%20support%20%26%20regions/Documents/Unisa%20Student%20Rules_2026.pdf
 - BA Honours Corrections Management (2026 curriculum): https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Arts-Honours-in-Corrections-Management-%2898655%29
+
+
+## Additional verified 2026 curricula — batch 2
+
+Imported into the live database and committed as `backend/seeds/unisa_verified_module_curricula_2026_batch_2.sql`:
+
+- **Higher Certificate in Criminal Justice (90006): 11 module options** — nine compulsory and two alternatives in the choose-one group.
+- **Diploma in Security Management (98221): 38 module options** — level 5, 6 and 7 compulsory modules plus the official choose-two elective groups.
+- **Bachelor of Arts in Criminology (98681): 55 module options** — levels 5, 6 and 7, preserving the Law, Corrections Management and Psychology pathways and the compulsory groups.
+
+These 104 records are linked to the correct qualification rows. The curriculum pages do not specify semester numbers consistently, so semester remains blank. The official 2026 registration pages are stored as each module row's source URL. Re-running the seed is safe: existing rows are skipped by qualification and module code.
+
+The live database now contains **290 module rows in total**, including **289 curriculum-linked modules across nine qualifications/streams** plus one earlier pre-existing test module row. The earlier six curriculum imports (185 modules) plus this batch (104 modules) account for the 289 curriculum-linked records. A database check reports **zero duplicate qualification/module-code pairs**.
+
+Sources for batch 2:
+- Higher Certificate in Criminal Justice: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Higher-Certificate-in-Criminal-Justice-%2890006%29
+- Diploma in Security Management: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Diploma-in-Security-Management-%2898221%29
+- BA in Criminology: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Arts-in-Criminology-%2898681%29
