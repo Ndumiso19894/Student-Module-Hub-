@@ -228,6 +228,18 @@ function inferTitle(text: string, fileName: string, moduleTitle = ""): string {
   return (title || (moduleTitle ? moduleTitle + " study material" : "UNISA study material")).slice(0, 240);
 }
 
+function inferCategoryFromFilename(fileName: string): string | null {
+  const name = fileName.toLowerCase().replace(/[_-]+/g, " ");
+  if (/\\b(tutorial letter|tutorial letters|tl\\s*0?1)\\b/.test(name)) return "Tutorial Letters";
+  if (/\\b(assignment|assessment)\\b/.test(name)) return "Assignment Questions";
+  if (/\\b(memorandum|memoranda|marking guideline|marking guidelines)\\b/.test(name)) return "Examination Memorandums";
+  if (/\\b(examination paper|exam paper|exam questions|examination questions)\\b/.test(name)) return "Examination Question Papers";
+  if (/\\b(study guide|learning guide)\\b/.test(name)) return "Study Guides";
+  if (/\\b(textbook|text book|prescribed book)\\b/.test(name)) return "Prescribed Books";
+  if (/\\b(lecture notes|lecture note|class notes)\\b/.test(name)) return "Lecture Notes";
+  return null;
+}
+
 function identify(text: string, modules: any[], categoryText = text) {
   const upper = text.toUpperCase();
   const matches = modules.filter((m) => {
@@ -348,6 +360,13 @@ Deno.serve(async (req) => {
           } else if (indexedCategories.length > 1) {
             found.evidence.push({ type: "drive_ocr_category_ambiguous", value: indexedCategories });
           }
+        }
+        const filenameCategory = inferCategoryFromFilename(file.name);
+        if (filenameCategory) {
+          found.category = filenameCategory;
+          found.categoryMatches = [{ name: filenameCategory }];
+          if (found.codeGroups.length === 1 && found.codeGroups[0][1].length === 1) found.confidence = 0.995;
+          found.evidence.push({ type: "filename_category", value: filenameCategory });
         }
         const status = parseError || found.codeGroups.length === 0 ? "unclassified" :
           found.confidence >= 0.95 && found.categoryMatches.length === 1 ? "pending" : "needs_review";
@@ -472,34 +491,43 @@ Deno.serve(async (req) => {
       if (!module) return json({ error: "Selected module does not exist." }, 404);
       const title = (requestedTitle || candidate.suggested_title || candidate.file_name || "UNISA study material")
         .replace(/\.pdf$/i, "").slice(0, 240);
-      const { data: document, error: docError } = await admin.from("documents").insert({
-        module_id: moduleId,
-        title,
-        description: "Imported from Google Drive. Original filename: " + candidate.file_name,
-        category,
-        semester: module.semester || "Not specified",
-        published: false,
-      }).select("id").single();
-      if (docError || !document) throw new Error("Could not create the module material record.");
-      const { error: sourceError } = await admin.from("document_sources").upsert({
-        document_id: document.id,
-        provider: "google_drive",
-        external_file_id: candidate.drive_file_id,
-        mime_type: "application/pdf",
-        size_bytes: candidate.size_bytes,
-        drive_modified_at: candidate.drive_modified_at,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "document_id" });
-      if (sourceError) {
-        await admin.from("documents").delete().eq("id", document.id);
-        throw new Error("Could not link the original Google Drive PDF.");
+      const { data: existingSource } = await admin.from("document_sources")
+        .select("document_id").eq("external_file_id", candidate.drive_file_id).maybeSingle();
+      let documentId = existingSource?.document_id ?? null;
+      if (existingSource?.document_id) {
+        documentId = existingSource.document_id;
+        const { error: updateDocumentError } = await admin.from("documents").update({
+          module_id: moduleId, title,
+          description: "Imported from Google Drive. Original filename: " + candidate.file_name,
+          category, semester: module.semester || "Not specified", published: false,
+        }).eq("id", documentId);
+        if (updateDocumentError) throw new Error("Could not update the existing unpublished material.");
+      } else {
+        const { data: document, error: docError } = await admin.from("documents").insert({
+          module_id: moduleId, title,
+          description: "Imported from Google Drive. Original filename: " + candidate.file_name,
+          category, semester: module.semester || "Not specified", published: false,
+        }).select("id").single();
+        if (docError || !document) throw new Error("Could not create the module material record.");
+        documentId = document.id;
+        const { error: sourceError } = await admin.from("document_sources").upsert({
+          document_id: documentId, provider: "google_drive",
+          external_file_id: candidate.drive_file_id, mime_type: "application/pdf",
+          size_bytes: candidate.size_bytes, drive_modified_at: candidate.drive_modified_at,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "document_id" });
+        if (sourceError) {
+          await admin.from("documents").delete().eq("id", documentId);
+          throw new Error("Could not link the original Google Drive PDF.");
+        }
       }
       const { error: updateError } = await admin.from("drive_import_candidates").update({
         suggested_module_id: moduleId, suggested_category: category,
-        status: "imported", imported_document_id: document.id, updated_at: new Date().toISOString(),
+        suggested_title: title, status: "imported", imported_document_id: documentId,
+        updated_at: new Date().toISOString(),
       }).eq("id", candidateId);
       if (updateError) throw new Error("Material linked, but the import queue could not be updated.");
-      return json({ imported: true, document_id: document.id, module_code: module.code, title });
+      return json({ imported: true, document_id: documentId, module_code: module.code, title });
     }
 
     if (action === "reject") {
