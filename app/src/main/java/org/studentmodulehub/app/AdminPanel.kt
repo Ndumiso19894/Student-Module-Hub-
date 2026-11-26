@@ -16,7 +16,7 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
     var qs by remember { mutableStateOf<List<Qualification>>(emptyList()) }
     var ms by remember { mutableStateOf<List<Module>>(emptyList()) }
     var ds by remember { mutableStateOf<List<Document>>(emptyList()) }
-    var students by remember { mutableStateOf<List<StudentAccount>>(emptyList()) }
+    var students by remember { mutableStateOf<List<StudentAccount>>(emptyList()) }\n    var driveFiles by remember { mutableStateOf<List<DrivePdf>>(emptyList()) }\n    var linkingDocument by remember { mutableStateOf<Document?>(null) }
     var q by remember { mutableStateOf<Qualification?>(null) }
     var m by remember { mutableStateOf<Module?>(null) }
     var table by remember { mutableStateOf("") }
@@ -29,7 +29,7 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
     fun job(block: suspend () -> Unit) {
         if (busy) return
         busy = true; notice = ""
-        scope.launch { try { block() } catch (_: Exception) { notice = "Action failed. Check permissions and connection. A qualification or module with dependent records cannot be deleted." } finally { busy = false } }
+        scope.launch { try { block() } catch (e: Exception) { notice = e.message?.takeIf { it.isNotBlank() } ?: "Action failed. Check permissions and connection." } finally { busy = false } }
     }
     fun loadQualifications() { section = "qualifications"; job { qs = backend.qualifications() } }
     fun loadModules(qualification: Qualification) { q = qualification; section = "modules"; job { ms = backend.modules(qualification.id) } }
@@ -75,14 +75,48 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
         }
         "documents" -> {
             Text("Documents · ${m?.title}", style=MaterialTheme.typography.titleLarge)
-            Text("Metadata only. PDF storage and downloads are not connected.")
+            Text("Create a document record first, then connect its PDF from your private Google Drive folder.")
             Button(enabled=!busy, onClick={ edit("documents", null, "", "", "", false, m!!.id) }) { Text("Add document") }
             if (!busy && ds.isEmpty()) Text("No documents yet.")
             ds.forEach { item -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
                 Text(item.title, style=MaterialTheme.typography.titleMedium); Text(if(item.published) "Published" else "Draft")
-                Row { TextButton(enabled=!busy, onClick={ edit("documents", item.id, item.title, item.description, "", item.published, m!!.id) }) { Text("Edit") }; TextButton(enabled=!busy, onClick={ pendingDelete="documents" to item.id }) { Text("Delete") } }
+                Row {
+                    TextButton(enabled=!busy, onClick={ edit("documents", item.id, item.title, item.description, "", item.published, m!!.id) }) { Text("Edit") }
+                    TextButton(enabled=!busy, onClick={
+                        linkingDocument = item
+                        section = "drive"
+                        job { driveFiles = backend.drivePdfs() }
+                    }) { Text("Choose Drive PDF") }
+                    TextButton(enabled=!busy, onClick={ pendingDelete="documents" to item.id }) { Text("Delete") }
+                }
             } } }
             OutlinedButton(onClick={ loadModules(q!!) }) { Text("Back") }
+        }
+        "drive" -> {
+            Text("Google Drive PDFs", style=MaterialTheme.typography.titleLarge)
+            Text("Choose the PDF to connect to: ${linkingDocument?.title.orEmpty()}")
+            Text("Only PDF files in the configured private study folder are shown.")
+            OutlinedButton(enabled=!busy, onClick={ job { driveFiles = backend.drivePdfs() } }) { Text("Refresh list") }
+            if (!busy && driveFiles.isEmpty()) Text("No PDFs found in the connected Drive folder.")
+            driveFiles.forEach { file ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(file.name, style=MaterialTheme.typography.titleMedium)
+                        if (file.sizeBytes.isNotBlank()) Text("Size: ${file.sizeBytes} bytes", style=MaterialTheme.typography.bodySmall)
+                        Button(enabled=!busy && linkingDocument != null, onClick={
+                            val target = linkingDocument
+                            if (target != null) job {
+                                backend.linkDrivePdf(target.id, file.id)
+                                ds = backend.documents(m!!.id)
+                                linkingDocument = null
+                                section = "documents"
+                                notice = "PDF linked to ${target.title}."
+                            }
+                        }) { Text("Link this PDF") }
+                    }
+                }
+            }
+            OutlinedButton(enabled=!busy, onClick={ linkingDocument=null; section="documents" }) { Text("Cancel") }
         }
         "edit" -> {
             Text(if(itemId==null) "Create ${table.dropLast(1)}" else "Edit ${table.dropLast(1)}", style=MaterialTheme.typography.titleLarge)
