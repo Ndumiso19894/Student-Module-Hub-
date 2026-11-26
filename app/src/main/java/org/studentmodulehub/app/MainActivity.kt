@@ -95,7 +95,18 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
         try {
             backend.completeCallback(incoming.second)
             if (incoming.first == "/recovery") { profile = null; screen = "resetPassword" }
-            else { profile = backend.restore(); screen = "home"; message = "Email confirmed. You are signed in." }
+            else {
+                val confirmedProfile = backend.restore()
+                if (confirmedProfile != null) {
+                    profile = confirmedProfile
+                    screen = "home"
+                    message = "Email confirmed. You are signed in."
+                } else {
+                    profile = null
+                    screen = "login"
+                    message = "Email confirmed. Please sign in to continue."
+                }
+            }
         } catch (_: Exception) { screen = "login"; message = "This link could not be verified. Request a new link on this device." }
         finally { busy = false; clearCallback() }
     }
@@ -141,7 +152,18 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     run { profile = backend.login(email, pass); demo = false; screen = "home" }
                 }, onSecondary = { go("forgot") }, secondary = "Forgot password?")
                 "register" -> AuthScreen("Create account", "Start your learning journey.", "Create account", busy, true, onBack = { go("welcome") }, onSubmit = { name, email, pass ->
-                    run { backend.register(name, email, pass); screen = "login"; message = "Registration submitted. If email confirmation is enabled, confirm your email before signing in." }
+                    run {
+                        val createdProfile = backend.register(name, email, pass)
+                        if (createdProfile != null) {
+                            profile = createdProfile
+                            demo = false
+                            screen = "home"
+                            message = "Your account has been created."
+                        } else {
+                            screen = "login"
+                            message = "Registration submitted. Check your email for a confirmation link, then return here to sign in."
+                        }
+                    }
                 }, onSecondary = { go("login") }, secondary = "Already have an account? Sign in")
                 "forgot" -> ForgotScreen(busy, onBack = { go("login") }, onSubmit = { email ->
                     run { backend.recover(email); message = "If the address is registered, recovery instructions will be sent. Open the link on this device to set a new password." }
