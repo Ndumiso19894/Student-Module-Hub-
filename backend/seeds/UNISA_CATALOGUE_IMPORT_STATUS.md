@@ -1,10 +1,10 @@
 # UNISA catalogue import status
 
-Verified against UNISA's official 2027 qualification listings on 26 November 2026.
+Verified against UNISA's official 2027 qualification listings and the 2026 stream-specific registration curriculum on 26 November 2026.
 
 ## Live Supabase catalogue
 
-The live Student Module Hub database now contains **340 qualification records** linked to UNISA's eight qualification-awarding colleges. This includes the initial undergraduate batch and a second verified batch of honours degrees and postgraduate diplomas.
+The live Student Module Hub database now contains **340 qualification records** linked to UNISA's eight qualification-awarding colleges. This includes the initial undergraduate batch, honours/postgraduate diploma and master's/doctoral listings, the separately added Advanced Diploma in Information Resource Management (90007), and the 2026 BEd Mathematics and English stream record.
 
 | College | Qualification records |
 |---|---:|
