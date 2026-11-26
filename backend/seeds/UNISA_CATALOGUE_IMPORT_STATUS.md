@@ -4,19 +4,19 @@ Verified against UNISA's official 2027 qualification listings on 26 November 202
 
 ## Live Supabase catalogue
 
-The live Student Module Hub database now contains **339 qualification records** linked to UNISA's eight qualification-awarding colleges. This includes the initial undergraduate batch and a second verified batch of honours degrees and postgraduate diplomas.
+The live Student Module Hub database now contains **340 qualification records** linked to UNISA's eight qualification-awarding colleges. This includes the initial undergraduate batch and a second verified batch of honours degrees and postgraduate diplomas.
 
 | College | Qualification records |
 |---|---:|
 | College of Accounting Sciences | 38 |
 | College of Agriculture and Environmental Sciences | 55 |
 | College of Economic and Management Sciences | 68 |
-| College of Education | 81 |
+| College of Education | 82 |
 | College of Human Sciences | 15 |
 | College of Law | 52 |
 | College of Science, Engineering and Technology | 27 |
 | Graduate School of Business Leadership | 3 |
-| **Total** | **339** |
+| **Total** | **340** |
 
 The second import added **91** college-confirmed honours and postgraduate diploma records. A third import added **122** master's and doctoral records using UNISA's official college-filtered listings and the 2027 exceptions page. All batches use duplicate checks by college and qualification code. The database import is idempotent by college and qualification code; rerunning the same batch does not create duplicates.
 
@@ -38,11 +38,13 @@ A separate, repeatable SQL seed is committed at `backend/seeds/unisa_verified_mo
 - **Advanced Diploma in Information Resource Management (90007): 10 modules** imported. The missing qualification record was added to the CSET catalogue. UNISA's subject catalogue identifies these modules as year modules, NQF 7 and 12 credits; semester/period is recorded as 0.
 - **Diploma in Corrections Management (98218): 35 modules** imported from the 2026 qualification curriculum. Public Administration and Social Work group alternatives are retained separately in the module descriptions; students must follow one grouping rather than mixing them. Module prerequisites and recommendations from the page are retained. Credits are recorded as 12 and semester numbers are left blank where the page does not specify a period.
 - **Bachelor of Laws (98680): 56 modules** imported from the current qualification curriculum. The page lists 12 credits per module; group A compulsory modules, the level-5 choose-one group, and the level-8 choose-two elective group are preserved in module descriptions. Prerequisite and recommendation notes shown on the qualification page are retained. Semester numbers are intentionally blank where the page only gives recommended ordering.
+- **BEd Senior Phase and FET Teaching – Mathematics and English (90104-MTE): 50 module options** imported from the 2026 stream-specific curriculum. The stream is a separate qualification row. The language group is marked choose-one; credits and semester periods are left unspecified rather than inferred.
 - **BA Honours in Corrections Management (98655): 4 modules** retained and enriched with the verified 2026 credits, NQF 8 and year/semester classification. HMPEN80 is a 12-credit semester module, with its exact semester number left unspecified; HRPEN81 is 36 credits and year-based; PEN4801 and PEN4804 are 24 credits and year-based.
 
-There are now **135 curriculum-linked module records** across five qualifications, plus one earlier module record associated with the pre-existing test data. The Diploma in Corrections Management (98218) contributes 35 listed modules, including the Public Administration and Social Work alternative groupings at levels 6 and 7. Group-choice rules and the prerequisites/recommendations shown on the curriculum page are retained in module descriptions. The Bachelor of Laws (98680) contributes 56 listed modules: nine compulsory plus three level-5 options, ten level-6 modules, ten level-7 modules, eight level-8 compulsory modules and sixteen level-8 elective options. All are recorded as 12 credits; the group/choice rules and listed prerequisites are retained in each module description. The exact semester number is left blank because the qualification page provides recommended ordering rather than definitive semester periods. This remains a limited curriculum sample, not a complete module catalogue. Continue importing only when the exact qualification curriculum and, where needed, the official module subject entry can be checked.
+There are now **185 curriculum-linked module records** across six qualifications/streams, plus one earlier module record associated with the pre-existing test data. The BEd Senior Phase and FET Teaching Mathematics and English stream (90104-MTE) contributes 50 listed module options across four NQF levels. It is stored as a separate stream-specific qualification so its subject combination is not mixed with other 90104 streams. The language communicative competence group is recorded as a choose-one group. Module credits and semester periods are left blank where the retrieved curriculum page does not specify them at module level. The Diploma in Corrections Management (98218) contributes 35 listed modules, including the Public Administration and Social Work alternative groupings at levels 6 and 7. Group-choice rules and the prerequisites/recommendations shown on the curriculum page are retained in module descriptions. The Bachelor of Laws (98680) contributes 56 listed modules: nine compulsory plus three level-5 options, ten level-6 modules, ten level-7 modules, eight level-8 compulsory modules and sixteen level-8 elective options. All are recorded as 12 credits; the group/choice rules and listed prerequisites are retained in each module description. The exact semester number is left blank because the qualification page provides recommended ordering rather than definitive semester periods. This remains a limited curriculum sample, not a complete module catalogue. Continue importing only when the exact qualification curriculum and, where needed, the official module subject entry can be checked.
 
-Source for the Diploma in Corrections Management curriculum: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Diploma-in-Corrections-Management-%2898218%29
+Source for the BEd Mathematics and English stream curriculum: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Education-in-Senior-Phase-and-Further-Education-and-Training-Teaching-School-subject-combination%3A-Mathematics-and-English-%2890104-%E2%80%93-MTE%29
+- Source for the Diploma in Corrections Management curriculum: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Diploma-in-Corrections-Management-%2898218%29
 - Source for the Bachelor of Laws curriculum: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Laws-%2898680-%E2%80%93-NEW%29
 
 Sources for the module batch:
@@ -58,7 +60,7 @@ This is a larger verified catalogue foundation, **not the complete UNISA qualifi
 
 Do not manufacture module codes, prerequisites, semester designations, credit values or curriculum combinations. Add modules only after checking the correct qualification stream and academic year on the official UNISA registration page. Qualification streams with different module combinations must be represented separately.
 
-The old Bachelor of Education (Senior and Further Education and Training Phases), code 02615, was phased out after 2024 and must not be presented as a current new-intake qualification. UNISA identifies the newer BEd Senior Phase and FET Teaching (90104) as a stream-based qualification; its module combinations differ by stream. The 90104 qualification is present in the database, but no stream-specific module combination has been invented.
+The old Bachelor of Education (Senior and Further Education and Training Phases), code 02615, was phased out after 2024 and must not be presented as a current new-intake qualification. UNISA identifies the newer BEd Senior Phase and FET Teaching (90104) as a stream-based qualification; its module combinations differ by stream. The generic 90104 qualification row is present, and the Mathematics and English stream (90104-MTE) has been added separately. Other 90104 streams still require their own verified curriculum imports; do not assign MTE modules to them.
 
 The 2027 BA Honours in Corrections Management page says updated registration/curriculum information will be available closer to the registration phase. The 98655 module rows currently represent the verified 2026 curriculum only.
 
