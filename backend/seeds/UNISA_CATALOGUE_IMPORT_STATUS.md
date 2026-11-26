@@ -4,21 +4,21 @@ Verified against UNISA's official 2027 qualification listings on 26 November 202
 
 ## Live Supabase catalogue
 
-The live Student Module Hub database now contains **216 qualification records** linked to UNISA's eight qualification-awarding colleges. This includes the initial undergraduate batch and a second verified batch of honours degrees and postgraduate diplomas.
+The live Student Module Hub database now contains **338 qualification records** linked to UNISA's eight qualification-awarding colleges. This includes the initial undergraduate batch and a second verified batch of honours degrees and postgraduate diplomas.
 
 | College | Qualification records |
 |---|---:|
-| College of Accounting Sciences | 20 |
-| College of Agriculture and Environmental Sciences | 40 |
-| College of Economic and Management Sciences | 60 |
-| College of Education | 40 |
-| College of Human Sciences | 9 |
-| College of Law | 18 |
+| College of Accounting Sciences | 38 |
+| College of Agriculture and Environmental Sciences | 55 |
+| College of Economic and Management Sciences | 68 |
+| College of Education | 81 |
+| College of Human Sciences | 15 |
+| College of Law | 52 |
 | College of Science, Engineering and Technology | 26 |
 | Graduate School of Business Leadership | 3 |
-| **Total** | **216** |
+| **Total** | **338** |
 
-The second import added **91** records after duplicate checks, covering college-confirmed honours and postgraduate diploma listings. The database import is idempotent by college and qualification code; rerunning the same batch does not create duplicates.
+The second import added **91** college-confirmed honours and postgraduate diploma records. A third import added **122** master's and doctoral records using UNISA's official college-filtered listings and the 2027 exceptions page. All batches use duplicate checks by college and qualification code. The database import is idempotent by college and qualification code; rerunning the same batch does not create duplicates.
 
 Four module records are loaded for **Bachelor of Arts Honours in Corrections Management (98655)** from the 2026 registration curriculum:
 
@@ -51,6 +51,7 @@ The 2027 BA Honours in Corrections Management page says updated registration/cur
 - Law honours and PG diplomas: https://www.unisa.ac.za/sites/corporate/default/Apply-for-admission/Honours-degrees-%26-postgraduate-diplomas/Qualifications/All-qualifications?cw_college=LAW
 - Science, Engineering and Technology honours and PG diplomas: https://www.unisa.ac.za/sites/corporate/default/Apply-for-admission/Honours-degrees-%26-postgraduate-diplomas/Qualifications/All-qualifications?cw_college=SCIENCE%2C+ENGINEERING+AND+TECHNOLOGY
 - Master's and doctoral qualifications: https://www.unisa.ac.za/sites/corporate/default/Apply-for-admission/Master%27s-%26-doctoral-degrees/Qualifications/All-qualifications
+- Master's and doctoral 2027 exceptions (college-specific): https://www.unisa.ac.za/sites/corporate/default/Apply-for-admission/Master%27s-%26-doctoral-degrees/Masters-doctoral-qualifications-exceptions
 - Master's and doctoral qualification exceptions: https://www.unisa.ac.za/sites/corporate/default/Apply-for-admission/Master%27s-%26-doctoral-degrees/Masters-doctoral-qualifications-exceptions
 - Undergraduate registration finder: https://www.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules
 - UNISA 2026 student rules: https://www.unisa.ac.za/static/myunisa/Content/Learner%20support%20%26%20regions/Documents/Unisa%20Student%20Rules_2026.pdf
