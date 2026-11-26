@@ -16,7 +16,7 @@ select cron.schedule(
           (select decrypted_secret from vault.decrypted_secrets where name = 'drive_importer_cron_secret')
       ),
       body := '{"action":"scan","limit":8}'::jsonb,
-      timeout_milliseconds := 10000
+      timeout_milliseconds := 120000
     );
   $job$
 );
