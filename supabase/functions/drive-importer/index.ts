@@ -348,16 +348,8 @@ Deno.serve(async (req) => {
         return json({ error: "A valid file ID, search term and folder are required." }, 400);
       }
       const token = await googleAccessToken();
-      const results = await driveFullTextSearch(token, folderId, term);
-      return json({ indexed_match: results.some((file: any) => file.id === fileId), matches: results.map((file: any) => ({ id: file.id, name: file.name })) });
-    }
-
-    if (action === "ocr_test") {
-      const fileId = String(body?.file_id ?? "");
-      if (!/^[a-zA-Z0-9_-]{10,200}$/.test(fileId)) return json({ error: "A valid Drive PDF file ID is required." }, 400);
-      const token = await googleAccessToken();
-      const text = await driveOcrPdfText(token, fileId);
-      return json({ ocr_enabled: true, characters_extracted: text.length, preview: text.slice(0, 1200) });
+      const indexedMatch = await driveFullTextSearchAny(token, folderId, [term], fileId);
+      return json({ indexed_match: indexedMatch, term });
     }
 
     if (action === "queue") {
