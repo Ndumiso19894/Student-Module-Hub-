@@ -10,7 +10,8 @@ Native Kotlin + Jetpack Compose + Material 3 app, based on the Stage 3 project. 
 - Student suspension, account editing and role management are deliberately not implemented in the app. This also prevents admins accidentally demoting their own account through the app. Student list does not expose email addresses from auth.users.
 
 ## Verification results
-- `testDebugUnitTest assembleDebug`: successful. Five unit tests cover form validation only, not app UI or security.
+- The original Stage 4 baseline passed `testDebugUnitTest assembleDebug` before the latest authentication changes. The current revision contains nine unit tests for authentication form validation; these new tests have not yet been run because the uploaded repository is still missing `gradle/wrapper/gradle-wrapper.jar`.
+- The current authentication UI changes have not yet been built or tested on a physical Android device.
 - Migration `stage4_prevent_catalogue_cascade_deletes` was applied to the real project and verified: both FKs use ON DELETE RESTRICT.
 - Live database inspection: both role policies and RLS were present; profile role default is student; `authenticated` does not have UPDATE privilege on the role column.
 - Anonymous live HTTP GET of profiles, qualifications, modules and documents: all HTTP 401. Anonymous qualification POST: HTTP 401.
