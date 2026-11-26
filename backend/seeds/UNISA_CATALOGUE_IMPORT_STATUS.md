@@ -113,3 +113,14 @@ The live database now contains **346 module rows**, of which **345 are curriculu
 Sources:
 - BA Forensic Science and Technology: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Arts-in-Forensic-Science-and-Technology-%2890002%29
 - Higher Certificate in Accounting Sciences: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Higher-Certificate-in-Accounting-Sciences-%2898201%29
+
+
+## Additional verified 2026 curriculum — batch 4
+
+Imported and committed as `backend/seeds/unisa_verified_module_curricula_2026_batch_4.sql`:
+
+- **Bachelor of Arts in Police Science (98683): 61 module options** across NQF levels 5–7. The compulsory core and the mutually exclusive Management, Public Administration, Law and Criminal Justice pathways are retained, including the same-pathway rule through level 7 and the listed prerequisites/co-requisites.
+
+The live database now contains **407 module rows**, of which **406 are curriculum-linked across twelve qualifications/streams**; one earlier module row is pre-existing test data. The batch 4 import adds 61 records. Duplicate qualification/module-code key check remains zero. Semester is blank where the curriculum page does not specify the module period.
+
+Source: https://m.unisa.ac.za/sites/corporate/default/Register-to-study-through-Unisa/Undergraduate-%26-honours-qualifications/Find-your-qualification-%26-choose-your-modules/All-qualifications/Bachelor-of-Arts-in-Police-Science-%2898683%29
