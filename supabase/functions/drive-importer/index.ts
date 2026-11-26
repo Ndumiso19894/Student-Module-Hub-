@@ -215,14 +215,17 @@ const categories = [
 ];
 
 function inferTitle(text: string, fileName: string, moduleTitle = ""): string {
+  const fallback = fileName.replace(/\.pdf$/i, "").replace(/[_]+/g, " ").replace(/\s+/g, " ").trim();
+  const genericFilename = /^(copy of )?\d{3,}([ _-][a-f0-9]{8,})?$/i.test(fallback) ||
+    /^(document|scan|download|file|untitled)( \d+)?$/i.test(fallback);
   const cleaned = text.split(/\n+/)
     .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter((line) => line.length >= 8 && line.length <= 180);
-  const useful = cleaned.find((line) =>
-    !/(©|copyright|university of south africa|\bUNISA\b|all rights reserved|printed|page \d|study@unisa|module code)/i.test(line)
-  );
-  const fallback = fileName.replace(/\.pdf$/i, "");
-  return (useful || (moduleTitle ? moduleTitle + " - " + fallback : fallback)).slice(0, 240);
+    .filter((line) => line.length >= 10 && line.length <= 150)
+    .filter((line) => !/(©|copyright|university of south africa|\bUNISA\b|all rights reserved|printed|page \d|study@unisa|module code|muckleneuk|pretoria|student number|licensed to|department of|faculty of|\bnotice\s+\d|\bwww\.|https?:\/\/)/i.test(line))
+    .filter((line) => !/^[-\d\s.:/]+$/.test(line));
+  const useful = cleaned.find((line) => /[a-z]{3,}/i.test(line) && !/^[A-Z\s]{12,}$/.test(line));
+  const title = !genericFilename ? fallback : (useful || fallback);
+  return (title || (moduleTitle ? moduleTitle + " study material" : "UNISA study material")).slice(0, 240);
 }
 
 function identify(text: string, modules: any[], categoryText = text) {
@@ -304,7 +307,7 @@ Deno.serve(async (req) => {
         if (!previous) return true;
         if (previous.status === "imported" || previous.status === "rejected") return false;
         if (rescan || previous.drive_modified_at !== (file.modifiedTime ?? null)) return true;
-        if (previous.status === "unclassified") {
+        if (["unclassified", "needs_review", "pending"].includes(previous.status)) {
           return Date.now() - new Date(previous.last_scanned_at).getTime() > 6 * 60 * 60 * 1000;
         }
         return false;
@@ -384,7 +387,7 @@ Deno.serve(async (req) => {
                 description: "Automatically identified from Google Drive. Original filename: " + file.name,
                 category: found.category,
                 semester: module.semester || "Not specified",
-                published: false,
+                published: true,
               }).select("id").single();
               if (!docError && document) {
                 const { error: sourceError } = await admin.from("document_sources").upsert({
