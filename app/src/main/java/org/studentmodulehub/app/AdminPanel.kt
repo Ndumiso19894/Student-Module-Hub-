@@ -16,7 +16,9 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
     var qs by remember { mutableStateOf<List<Qualification>>(emptyList()) }
     var ms by remember { mutableStateOf<List<Module>>(emptyList()) }
     var ds by remember { mutableStateOf<List<Document>>(emptyList()) }
-    var students by remember { mutableStateOf<List<StudentAccount>>(emptyList()) }\n    var driveFiles by remember { mutableStateOf<List<DrivePdf>>(emptyList()) }\n    var linkingDocument by remember { mutableStateOf<Document?>(null) }
+    var students by remember { mutableStateOf<List<StudentAccount>>(emptyList()) }
+    var driveFiles by remember { mutableStateOf<List<DrivePdf>>(emptyList()) }
+    var linkingDocument by remember { mutableStateOf<Document?>(null) }
     var q by remember { mutableStateOf<Qualification?>(null) }
     var m by remember { mutableStateOf<Module?>(null) }
     var table by remember { mutableStateOf("") }
