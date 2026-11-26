@@ -64,7 +64,7 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
             Button(enabled=!busy, onClick={
                 job {
                     val result = backend.scanDriveMaterials(8)
-                    scanSummary = "Scanned ${result.optInt("scanned")} PDFs. ${result.optInt("remaining_unscanned")} remain in the current Drive scan."
+                    scanSummary = "Scanned ${result.optInt("scanned")} new PDFs. ${result.optInt("remaining_unscanned")} remain. Found ${result.optInt("total_files_found")} files across ${result.optInt("folders_scanned")} folders; ${result.optInt("non_pdf_files")} non-PDF files are inventoried but not yet importable."
                     importCandidates = backend.driveImportQueue()
                     notice = scanSummary
                 }
