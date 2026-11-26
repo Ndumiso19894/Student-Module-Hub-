@@ -309,7 +309,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     }
     Button(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
         validation = Validation.auth(name, email, password, register, confirmPassword)
-        if (validation.isEmpty()) onSubmit(name.trim(), email.trim().lowercase(), password)
+        if (validation.isEmpty()) onSubmit(name.trim(), email.trim(), password)
     }) { Text(action) }
     TextButton(enabled = !busy, onClick = onSecondary, modifier = Modifier.fillMaxWidth()) { Text(secondary) }
 }
@@ -318,7 +318,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     TextButton(onClick = onBack, enabled = !busy) { Text("← Back") }; Brand(); Spacer(Modifier.height(10.dp)); PageHeader("Forgot password?", "Enter your email to request recovery instructions.")
     if (validation.isNotEmpty()) Notice(validation, true)
     OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email address") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
-    Button(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = { if (!email.contains("@")) validation = "Enter a valid email address." else { validation = ""; onSubmit(email) } }) { Text("Send recovery email") }
+    Button(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = { if (!Validation.email(email)) validation = "Enter a valid email address." else { validation = ""; onSubmit(email.trim()) } }) { Text("Send recovery email") }
 }
 
 @Composable fun ResetScreen(busy: Boolean, onSubmit: (String) -> Unit) {
