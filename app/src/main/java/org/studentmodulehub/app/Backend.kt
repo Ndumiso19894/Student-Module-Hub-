@@ -15,6 +15,7 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.FlowType
 import io.github.jan.supabase.auth.SessionManager
 import io.github.jan.supabase.auth.user.UserSession
+import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.from
@@ -40,6 +41,9 @@ class Backend(context: Context) {
     suspend fun login(email: String, password: String): Profile {
         client.auth.signInWith(Email) { this.email = normalizeEmail(email); this.password = password }
         return profileInternal()
+    }
+    suspend fun signInWithGoogle() {
+        client.auth.signInWith(Google, redirectUrl = "org.studentmodulehub.app://auth/google")
     }
     suspend fun register(name: String, email: String, password: String): Profile? {
         client.auth.signUpWith(Email, redirectUrl = "org.studentmodulehub.app://auth/confirm") {
