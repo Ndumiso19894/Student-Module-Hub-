@@ -117,6 +117,39 @@ class Backend(context: Context) {
         check(response.optBoolean("linked")) { "The PDF could not be linked." }
     }
 
+    suspend fun downloadMaterial(documentId: String): ByteArray {
+        require(documentId.matches(Regex("[0-9a-fA-F-]{36}")))
+        val accessToken = client.auth.currentSessionOrNull()?.accessToken
+            ?: throw java.io.IOException("Your session has expired. Sign in again.")
+        return withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val connection = java.net.URL("${BuildConfig.SUPABASE_URL}/functions/v1/drive-materials")
+                .openConnection() as java.net.HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 20000
+                connection.readTimeout = 60000
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
+                connection.setRequestProperty("Authorization", "Bearer $accessToken")
+                val payload = org.json.JSONObject().put("action", "download").put("document_id", documentId)
+                connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                val status = connection.responseCode
+                if (status !in 200..299) {
+                    val errorBody = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                    val detail = try { org.json.JSONObject(errorBody).optString("error") } catch (_: Exception) { "" }
+                    throw java.io.IOException(detail.ifBlank { "Material download failed (HTTP $status)." })
+                }
+                check(connection.contentType?.contains("application/pdf", ignoreCase = true) == true) {
+                    "The materials service did not return a PDF."
+                }
+                connection.inputStream.use { it.readBytes() }.also { check(it.isNotEmpty()) { "The PDF is empty." } }
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
     private suspend fun driveRequest(payload: org.json.JSONObject): org.json.JSONObject {
         val accessToken = client.auth.currentSessionOrNull()?.accessToken
             ?: throw java.io.IOException("Your session has expired. Sign in again.")
