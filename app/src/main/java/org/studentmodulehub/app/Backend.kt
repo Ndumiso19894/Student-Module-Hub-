@@ -147,12 +147,12 @@ class Backend(context: Context) {
         val rows = JSONArray(client.from("profiles").select().data)
         return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> StudentAccount(o.getString("id"), o.optString("display_name"), o.optString("role"), o.optString("created_at")) } }.sortedBy { it.name }
     }
-    suspend fun saveItem(table: String, id: String?, title: String, description: String, code: String, parentId: String?, published: Boolean, category: String = "Other Study Materials") {
+    suspend fun saveItem(table: String, id: String?, title: String, description: String, code: String, parentId: String?, published: Boolean, category: String = "Other Study Materials", level: String = "") {
         require(table in listOf("qualifications", "modules", "documents")); require(title.isNotBlank())
         if (id == null) {
             val payload = buildJsonObject {
                 put("title", title.trim()); put("description", description.trim()); put("published", published)
-                if (table == "qualifications") put("college_id", requireNotNull(parentId))
+                if (table == "qualifications") { put("college_id", requireNotNull(parentId)); put("qualification_code", code.trim()); put("qualification_level", level.trim()) }
                 if (table == "modules") { put("qualification_id", requireNotNull(parentId)); put("code", code.trim()) }
                 if (table == "documents") { put("module_id", requireNotNull(parentId)); put("category", category) }
             }
@@ -160,7 +160,7 @@ class Backend(context: Context) {
         } else {
             client.from(table).update({
                 set("title", title.trim()); set("description", description.trim()); set("published", published)
-                if (table == "qualifications") set("college_id", requireNotNull(parentId))
+                if (table == "qualifications") { set("college_id", requireNotNull(parentId)); set("qualification_code", code.trim()); set("qualification_level", level.trim()) }
                 if (table == "modules") { set("qualification_id", requireNotNull(parentId)); set("code", code.trim()) }
                 if (table == "documents") { set("module_id", requireNotNull(parentId)); set("category", category) }
             }) { filter { eq("id", id) }; select() }.let { check(JSONArray(it.data).length() == 1) { "No record was updated." } }
