@@ -342,7 +342,7 @@ Deno.serve(async (req) => {
           }
         }
         const status = parseError || found.codeGroups.length === 0 ? "unclassified" :
-          found.confidence >= 0.95 ? "pending" : "needs_review";
+          found.confidence >= 0.95 && found.categoryMatches.length === 1 ? "pending" : "needs_review";
         const { data: saved, error: saveError } = await admin.from("drive_import_candidates").upsert({
           drive_file_id: file.id,
           file_name: file.name,
