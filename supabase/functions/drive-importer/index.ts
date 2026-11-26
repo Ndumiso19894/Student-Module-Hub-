@@ -50,7 +50,7 @@ async function driveList(token: string, folderId: string) {
     const params = new URLSearchParams({
       q: "'" + folderId.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "' in parents and trashed = false",
       pageSize: "1000",
-      fields: "nextPageToken,files(id,name,mimeType,size,modifiedTime,parents)",
+      fields: "nextPageToken,files(id,name,mimeType,size,modifiedTime,parents,shortcutDetails(targetId,targetMimeType))",
       orderBy: "name",
     });
     if (pageToken) params.set("pageToken", pageToken);
@@ -137,8 +137,28 @@ async function driveInventory(token: string, rootId: string) {
     visited.add(folder);
     const children = await driveList(token, folder);
     for (const item of children) {
-      if (item.mimeType === "application/vnd.google-apps.folder") queue.push(item.id);
-      else {
+      if (item.mimeType === "application/vnd.google-apps.folder") {
+        queue.push(item.id);
+      } else if (item.mimeType === "application/vnd.google-apps.shortcut") {
+        const targetId = item.shortcutDetails?.targetId;
+        const targetMime = item.shortcutDetails?.targetMimeType;
+        if (targetId && targetMime === "application/vnd.google-apps.folder") {
+          queue.push(targetId);
+        } else if (targetId && targetMime === "application/pdf") {
+          const targetResponse = await fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(targetId) + "?fields=id,name,mimeType,size,modifiedTime,parents", {
+            headers: { Authorization: "Bearer " + token },
+          });
+          if (targetResponse.ok) {
+            const target = await targetResponse.json();
+            totalFiles++;
+            mimeCounts["application/pdf"] = (mimeCounts["application/pdf"] || 0) + 1;
+            pdfs.push({ ...target, name: item.name || target.name });
+          }
+        } else {
+          totalFiles++;
+          mimeCounts[item.mimeType] = (mimeCounts[item.mimeType] || 0) + 1;
+        }
+      } else {
         totalFiles++;
         const mime = item.mimeType || "unknown";
         mimeCounts[mime] = (mimeCounts[mime] || 0) + 1;
@@ -270,11 +290,20 @@ Deno.serve(async (req) => {
       const files = inventory.pdfs;
       const { data: modules, error: moduleError } = await admin.from("modules").select("id,code,title");
       if (moduleError) throw new Error("Could not load the module catalogue.");
-      const { data: existing, error: existingError } = await admin.from("drive_import_candidates").select("drive_file_id,status");
+      const { data: existing, error: existingError } = await admin.from("drive_import_candidates").select("drive_file_id,status,last_scanned_at,drive_modified_at");
       if (existingError) throw new Error("Could not load the import queue.");
-      const known = new Map((existing ?? []).map((row: any) => [row.drive_file_id, row.status]));
+      const known = new Map((existing ?? []).map((row: any) => [row.drive_file_id, row]));
       const rescan = body?.rescan === true;
-      const pending = files.filter((file) => known.get(file.id) !== "imported" && (rescan || !known.has(file.id)));
+      const pending = files.filter((file) => {
+        const previous = known.get(file.id);
+        if (!previous) return true;
+        if (previous.status === "imported" || previous.status === "rejected") return false;
+        if (rescan || previous.drive_modified_at !== (file.modifiedTime ?? null)) return true;
+        if (previous.status === "unclassified") {
+          return Date.now() - new Date(previous.last_scanned_at).getTime() > 6 * 60 * 60 * 1000;
+        }
+        return false;
+      });
       const limit = Math.max(1, Math.min(Number(body?.limit ?? 8), 15));
       const batch = pending.slice(0, limit);
       const results: any[] = [];
