@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -219,15 +220,74 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     }
 }
 @Composable fun AuthScreen(title: String, subtitle: String, action: String, busy: Boolean, register: Boolean, onBack: () -> Unit, onSubmit: (String, String, String) -> Unit, onSecondary: () -> Unit, secondary: String) {
-    var name by remember { mutableStateOf("") }; var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }; var validation by remember { mutableStateOf("") }
-    TextButton(onClick = onBack, enabled = !busy) { Text("← Back") }; Brand(); Spacer(Modifier.height(10.dp)); PageHeader(title, subtitle)
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var confirmVisible by remember { mutableStateOf(false) }
+    var validation by remember { mutableStateOf("") }
+
+    TextButton(onClick = onBack, enabled = !busy) { Text("← Back") }
+    Brand()
+    Spacer(Modifier.height(10.dp))
+    PageHeader(title, subtitle)
     if (validation.isNotBlank()) Notice(validation, true)
-    if (register) OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-    OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email address") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
-    OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, modifier = Modifier.fillMaxWidth(), singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+
+    if (register) {
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it; validation = "" },
+            label = { Text("Full name") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            enabled = !busy
+        )
+    }
+    OutlinedTextField(
+        value = email,
+        onValueChange = { email = it; validation = "" },
+        label = { Text("Email address") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        enabled = !busy,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+    )
+    OutlinedTextField(
+        value = password,
+        onValueChange = { password = it; validation = "" },
+        label = { Text(if (register) "Create password" else "Password") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        enabled = !busy,
+        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        trailingIcon = {
+            TextButton(onClick = { passwordVisible = !passwordVisible }, enabled = !busy) {
+                Text(if (passwordVisible) "Hide" else "Show")
+            }
+        }
+    )
+    if (register) {
+        OutlinedTextField(
+            value = confirmPassword,
+            onValueChange = { confirmPassword = it; validation = "" },
+            label = { Text("Confirm password") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            enabled = !busy,
+            visualTransformation = if (confirmVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                TextButton(onClick = { confirmVisible = !confirmVisible }, enabled = !busy) {
+                    Text(if (confirmVisible) "Hide" else "Show")
+                }
+            }
+        )
+    }
     Button(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
-        validation = Validation.auth(name, email, password, register)
-        if (validation.isEmpty()) onSubmit(name, email, password)
+        validation = Validation.auth(name, email, password, register, confirmPassword)
+        if (validation.isEmpty()) onSubmit(name.trim(), email.trim().lowercase(), password)
     }) { Text(action) }
     TextButton(enabled = !busy, onClick = onSecondary, modifier = Modifier.fillMaxWidth()) { Text(secondary) }
 }
