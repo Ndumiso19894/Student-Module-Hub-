@@ -103,6 +103,41 @@ Deno.serve(async (req) => {
       return json({ files: driveData.files ?? [], nextPageToken: driveData.nextPageToken ?? null });
     }
 
+    if (action === "link") {
+      if (!isAdmin) return json({ error: "Administrator access required." }, 403);
+      const documentId = String(body?.document_id ?? "");
+      const fileId = String(body?.file_id ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(documentId) || !/^[a-zA-Z0-9_-]{10,200}$/.test(fileId)) {
+        return json({ error: "Invalid document or Drive file ID." }, 400);
+      }
+      const { data: document } = await admin.from("documents").select("id").eq("id", documentId).maybeSingle();
+      if (!document) return json({ error: "Document record not found." }, 404);
+      const folderId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
+      if (!folderId) return json({ error: "Drive folder is not configured." }, 503);
+      const token = await googleAccessToken();
+      const fileResponse = await fetch(
+        "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) +
+          "?fields=id,name,mimeType,size,modifiedTime,parents",
+        { headers: { Authorization: "Bearer " + token } },
+      );
+      if (!fileResponse.ok) return json({ error: "Drive file not found or not accessible." }, 404);
+      const file = await fileResponse.json();
+      if (file.mimeType !== "application/pdf" || !(file.parents ?? []).includes(folderId)) {
+        return json({ error: "Only PDF files inside the configured study folder can be linked." }, 400);
+      }
+      const { error: saveError } = await admin.from("document_sources").upsert({
+        document_id: documentId,
+        provider: "google_drive",
+        external_file_id: file.id,
+        mime_type: file.mimeType,
+        size_bytes: file.size ? Number(file.size) : null,
+        drive_modified_at: file.modifiedTime ?? null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "document_id" });
+      if (saveError) return json({ error: "Could not save the Drive link." }, 500);
+      return json({ linked: true, document_id: documentId, file_name: file.name });
+    }
+
     if (action === "download") {
       const documentId = String(body?.document_id ?? "");
       if (!/^[0-9a-f-]{36}$/i.test(documentId)) return json({ error: "Invalid document." }, 400);
