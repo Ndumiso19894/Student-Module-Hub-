@@ -3,9 +3,6 @@ package org.studentmodulehub.app
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -29,17 +26,6 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
     var parentId by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<Pair<String,String>?>(null) }
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    var uploadTarget by remember { mutableStateOf<String?>(null) }
-    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        val target = uploadTarget
-        if (uri != null && target != null) job {
-            backend.uploadDocumentPdf(target, uri, context.contentResolver)
-            ds = backend.documents(m!!.id)
-            notice = "PDF uploaded successfully."
-        }
-        uploadTarget = null
-    }
     fun job(block: suspend () -> Unit) {
         if (busy) return
         busy = true; notice = ""
@@ -89,18 +75,12 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
         }
         "documents" -> {
             Text("Documents · ${m?.title}", style=MaterialTheme.typography.titleLarge)
-            Text("Upload a PDF for each document. Files are stored privately; students can download them only when the document and its parent records are published.")
+            Text("Metadata only. PDF storage and downloads are not connected.")
             Button(enabled=!busy, onClick={ edit("documents", null, "", "", "", false, m!!.id) }) { Text("Add document") }
             if (!busy && ds.isEmpty()) Text("No documents yet.")
             ds.forEach { item -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
-                Text(item.title, style=MaterialTheme.typography.titleMedium)
-                Text(if(item.published) "Published" else "Draft")
-                Text(if(item.storagePath.isNotBlank()) "PDF uploaded" else "No PDF attached", style=MaterialTheme.typography.bodySmall)
-                Row {
-                    TextButton(enabled=!busy, onClick={ edit("documents", item.id, item.title, item.description, "", item.published, m!!.id) }) { Text("Edit") }
-                    TextButton(enabled=!busy, onClick={ uploadTarget=item.id; pdfPicker.launch(arrayOf("application/pdf")) }) { Text(if(item.storagePath.isBlank()) "Upload PDF" else "Replace PDF") }
-                    TextButton(enabled=!busy, onClick={ pendingDelete="documents" to item.id }) { Text("Delete") }
-                }
+                Text(item.title, style=MaterialTheme.typography.titleMedium); Text(if(item.published) "Published" else "Draft")
+                Row { TextButton(enabled=!busy, onClick={ edit("documents", item.id, item.title, item.description, "", item.published, m!!.id) }) { Text("Edit") }; TextButton(enabled=!busy, onClick={ pendingDelete="documents" to item.id }) { Text("Delete") } }
             } } }
             OutlinedButton(onClick={ loadModules(q!!) }) { Text("Back") }
         }
