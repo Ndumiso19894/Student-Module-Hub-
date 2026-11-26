@@ -60,7 +60,7 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
         }
         "importer" -> {
             Text("Google Drive · Automatic material identification", style=MaterialTheme.typography.titleLarge)
-            Text("The scanner reads PDF text, not just filenames. It processes up to 8 new PDFs per scan. Image-only scans are kept unclassified for OCR.")
+            Text("The server checks this Drive folder and nested folders every 5 minutes, even when the app is closed. It identifies PDFs from their contents and uses Google Drive indexed OCR for scanned PDFs. High-confidence matches are added as unpublished materials; uncertain matches need review. Non-PDF files are inventoried but are not yet importable.")
             Button(enabled=!busy, onClick={
                 job {
                     val result = backend.scanDriveMaterials(8)
@@ -68,7 +68,7 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
                     importCandidates = backend.driveImportQueue()
                     notice = scanSummary
                 }
-            }) { Text("Scan next 8 PDFs") }
+            }) { Text("Scan Drive now (up to 8 PDFs)") }
             OutlinedButton(enabled=!busy, onClick={ job { importCandidates = backend.driveImportQueue() } }) { Text("Refresh review queue") }
             if (scanSummary.isNotBlank()) Text(scanSummary, style=MaterialTheme.typography.bodyMedium)
             if (!busy && importCandidates.isEmpty()) Text("No scanned documents in the review queue yet.")
