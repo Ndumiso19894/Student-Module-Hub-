@@ -14,7 +14,7 @@ Native Kotlin + Jetpack Compose + Material 3 app, based on the Stage 3 project. 
 
 ## Automatic Google Drive materials importer
 
-The private Drive importer recursively scans the configured folder, nested folders and folder shortcuts every five minutes. It discovers new PDFs without relying on filenames, extracts selectable PDF text, and uses Google Drive's indexed full-text search as an OCR-aware fallback for scanned PDFs. Google Drive automatically indexes supported PDFs and images with text for search; the importer searches that indexed content for UNISA module codes and material-category terms. If the index is not ready, unclassified files are retried after six hours.
+The private Drive importer recursively scans the configured folder, nested folders and folder shortcuts every five minutes. It discovers new PDFs without relying on filenames, extracts selectable PDF text, and uses Google Drive's indexed full-text search as an OCR-aware fallback for scanned PDFs. Google Drive automatically indexes supported PDFs for search; the importer searches that indexed content for UNISA module codes and material-category terms. If the index is not ready, unclassified files are retried after six hours.
 
 High-confidence, unique module-and-category matches are registered automatically as unpublished materials. Ambiguous matches are held in the administrator review queue, where the module, category and title can be corrected before import. The source files remain in Drive and are not moved or deleted. Non-PDF files are currently counted and inventoried but are not yet registered as downloadable app materials.
 
