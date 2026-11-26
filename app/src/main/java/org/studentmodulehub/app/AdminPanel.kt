@@ -73,6 +73,7 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
             if (scanSummary.isNotBlank()) Text(scanSummary, style=MaterialTheme.typography.bodyMedium)
             if (!busy && importCandidates.isEmpty()) Text("No scanned documents in the review queue yet.")
             importCandidates.forEach { item ->
+                var selectedTitle by remember(item.id) { mutableStateOf(item.suggestedTitle) }
                 var selectedModuleId by remember(item.id) { mutableStateOf(item.suggestedModuleId) }
                 var selectedCategory by remember(item.id) { mutableStateOf(item.category) }
                 var moduleMenu by remember(item.id) { mutableStateOf(false) }
@@ -81,6 +82,7 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         Text(item.fileName, style=MaterialTheme.typography.titleMedium)
+                        OutlinedTextField(value=selectedTitle, onValueChange={ selectedTitle=it }, label={ Text("Material title") }, modifier=Modifier.fillMaxWidth())
                         Text("Status: ${item.status} · Confidence: ${(item.confidence * 100).toInt()}%")
                         Text(if(item.moduleCode.isNotBlank()) "Suggested module: ${item.moduleCode} · ${item.moduleTitle}" else "No reliable module match. Select the correct module below.")
                         Text("Suggested category: ${item.category}")
@@ -105,7 +107,7 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
                         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                             Button(enabled=!busy && selectedModuleId.isNotBlank() && item.status!="imported", onClick={
                                 job {
-                                    backend.approveDriveCandidate(item.id, selectedModuleId, selectedCategory)
+                                    backend.approveDriveCandidate(item.id, selectedModuleId, selectedCategory, selectedTitle)
                                     importCandidates = backend.driveImportQueue()
                                     notice = "Imported as an unpublished material. You can publish it from the module's documents section."
                                 }
