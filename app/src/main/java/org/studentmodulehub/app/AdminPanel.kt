@@ -28,6 +28,8 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
     var published by remember { mutableStateOf(false) }
     var category by remember { mutableStateOf("Other Study Materials") }
     var level by remember { mutableStateOf("") }
+    var academicYear by remember { mutableStateOf("") }; var credits by remember { mutableStateOf("") }; var nqfLevel by remember { mutableStateOf("") }
+    var semester by remember { mutableStateOf("") }; var officialUrl by remember { mutableStateOf("") }
     var parentId by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<Pair<String,String>?>(null) }
     val scope = rememberCoroutineScope()
@@ -39,9 +41,9 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
     fun loadQualifications() { section = "qualifications"; job { colleges = backend.colleges(); qs = backend.qualifications() } }
     fun loadModules(qualification: Qualification) { q = qualification; section = "modules"; job { ms = backend.modules(qualification.id) } }
     fun loadDocuments(module: Module) { m = module; section = "documents"; job { ds = backend.documents(module.id) } }
-    fun edit(t: String, id: String?, name: String, desc: String, c: String, live: Boolean, parent: String, cat: String = "Other Study Materials", qualificationLevel: String = "") {
+    fun edit(t: String, id: String?, name: String, desc: String, c: String, live: Boolean, parent: String, cat: String = "Other Study Materials", qualificationLevel: String = "", year: String = "", creditValue: String = "", nqf: String = "", sem: String = "", url: String = "") {
         table=t; itemId=id; title=name; description=desc; code=c; published=live; parentId=parent
-        category=cat; level=qualificationLevel; notice=""; section="edit"
+        category=cat; level=qualificationLevel; academicYear=year; credits=creditValue; nqfLevel=nqf; semester=sem; officialUrl=url; notice=""; section="edit"
     }
     PageHeader("Administrator", "Catalogue and student management")
     if (notice.isNotBlank()) Notice(notice, true)
@@ -65,7 +67,7 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
             if (!busy && qs.isEmpty()) Text("No qualifications yet.")
             qs.forEach { item -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
                 Text(item.title, style=MaterialTheme.typography.titleMedium); Text(listOf(item.qualificationCode, item.level, colleges.firstOrNull { it.id == item.collegeId }?.name.orEmpty()).filter { it.isNotBlank() }.joinToString(" · ")); Text(if(item.published) "Published" else "Draft")
-                Row { TextButton(enabled=!busy, onClick={ edit("qualifications", item.id, item.title, item.description, item.qualificationCode, item.published, item.collegeId, qualificationLevel=item.level) }) { Text("Edit") }; TextButton(enabled=!busy, onClick={ loadModules(item) }) { Text("Modules") }; TextButton(enabled=!busy, onClick={ pendingDelete="qualifications" to item.id }) { Text("Delete") } }
+                Row { TextButton(enabled=!busy, onClick={ edit("qualifications", item.id, item.title, item.description, item.qualificationCode, item.published, item.collegeId, qualificationLevel=item.level, year=item.academicYear?.toString().orEmpty(), url=item.officialUrl) }) { Text("Edit") }; TextButton(enabled=!busy, onClick={ loadModules(item) }) { Text("Modules") }; TextButton(enabled=!busy, onClick={ pendingDelete="qualifications" to item.id }) { Text("Delete") } }
             } } }
             OutlinedButton(onClick={ section="menu" }) { Text("Back") }
         }
@@ -75,7 +77,7 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
             if (!busy && ms.isEmpty()) Text("No modules yet.")
             ms.forEach { item -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
                 Text(item.title, style=MaterialTheme.typography.titleMedium); Text("${item.code} · ${if(item.published) "Published" else "Draft"}")
-                Row { TextButton(enabled=!busy, onClick={ edit("modules", item.id, item.title, item.description, item.code, item.published, q!!.id) }) { Text("Edit") }; TextButton(enabled=!busy, onClick={ loadDocuments(item) }) { Text("Documents") }; TextButton(enabled=!busy, onClick={ pendingDelete="modules" to item.id }) { Text("Delete") } }
+                Row { TextButton(enabled=!busy, onClick={ edit("modules", item.id, item.title, item.description, item.code, item.published, q!!.id, year=item.academicYear?.toString().orEmpty(), creditValue=item.credits?.toString().orEmpty(), nqf=item.nqfLevel?.toString().orEmpty(), sem=item.semester, url=item.officialUrl) }) { Text("Edit") }; TextButton(enabled=!busy, onClick={ loadDocuments(item) }) { Text("Documents") }; TextButton(enabled=!busy, onClick={ pendingDelete="modules" to item.id }) { Text("Delete") } }
             } } }
             OutlinedButton(onClick={ loadQualifications() }) { Text("Back") }
         }
@@ -87,7 +89,7 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
             ds.forEach { item -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
                 Text(item.title, style=MaterialTheme.typography.titleMedium); Text(item.category); Text(if(item.published) "Published" else "Draft")
                 Row {
-                    TextButton(enabled=!busy, onClick={ edit("documents", item.id, item.title, item.description, "", item.published, m!!.id, item.category) }) { Text("Edit") }
+                    TextButton(enabled=!busy, onClick={ edit("documents", item.id, item.title, item.description, "", item.published, m!!.id, item.category, year=item.academicYear?.toString().orEmpty(), sem=item.semester) }) { Text("Edit") }
                     TextButton(enabled=!busy, onClick={
                         linkingDocument = item
                         section = "drive"
@@ -128,6 +130,9 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
             Text(if(itemId==null) "Create ${table.dropLast(1)}" else "Edit ${table.dropLast(1)}", style=MaterialTheme.typography.titleLarge)
             OutlinedTextField(value=title, onValueChange={ title=it }, label={ Text("Title") }, modifier=Modifier.fillMaxWidth())
             if (table=="modules" || table=="qualifications") OutlinedTextField(value=code, onValueChange={ code=it }, label={ Text(if (table=="modules") "Module code" else "Qualification code") }, modifier=Modifier.fillMaxWidth())
+            if (table=="modules") { OutlinedTextField(value=credits, onValueChange={ credits=it }, label={ Text("Credits") }, modifier=Modifier.fillMaxWidth()); OutlinedTextField(value=nqfLevel, onValueChange={ nqfLevel=it }, label={ Text("NQF level") }, modifier=Modifier.fillMaxWidth()); OutlinedTextField(value=semester, onValueChange={ semester=it }, label={ Text("Semester (e.g. 1, 2 or year)") }, modifier=Modifier.fillMaxWidth()); OutlinedTextField(value=academicYear, onValueChange={ academicYear=it }, label={ Text("Academic year") }, modifier=Modifier.fillMaxWidth()); OutlinedTextField(value=officialUrl, onValueChange={ officialUrl=it }, label={ Text("Official UNISA URL") }, modifier=Modifier.fillMaxWidth()) }
+            if (table=="qualifications") { OutlinedTextField(value=academicYear, onValueChange={ academicYear=it }, label={ Text("Academic year") }, modifier=Modifier.fillMaxWidth()); OutlinedTextField(value=officialUrl, onValueChange={ officialUrl=it }, label={ Text("Official UNISA URL") }, modifier=Modifier.fillMaxWidth()) }
+            if (table=="documents") { OutlinedTextField(value=academicYear, onValueChange={ academicYear=it }, label={ Text("Academic year") }, modifier=Modifier.fillMaxWidth()); OutlinedTextField(value=semester, onValueChange={ semester=it }, label={ Text("Semester (optional)") }, modifier=Modifier.fillMaxWidth()) }
             if (table=="qualifications") OutlinedTextField(value=level, onValueChange={ level=it }, label={ Text("Qualification level (e.g. Bachelor's, Honours, Postgraduate Diploma)") }, modifier=Modifier.fillMaxWidth())
             OutlinedTextField(value=description, onValueChange={ description=it }, label={ Text("Description") }, modifier=Modifier.fillMaxWidth())
             if (table=="qualifications") {
@@ -148,7 +153,7 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
             Button(enabled=!busy, onClick={
                 if(title.isBlank() || parentId.isBlank()) notice="Enter a title and select the parent record."
                 else job {
-                    backend.saveItem(table, itemId, title, description, code, parentId.takeIf { it.isNotBlank() }, published, category, level)
+                    backend.saveItem(table, itemId, title, description, code, parentId.takeIf { it.isNotBlank() }, published, category, level, academicYear.toIntOrNull(), credits.toIntOrNull(), nqfLevel.toIntOrNull(), semester, officialUrl)
                     when(table) { "qualifications" -> { qs=backend.qualifications(); section="qualifications" }; "modules" -> { ms=backend.modules(q!!.id); section="modules" }; else -> { ds=backend.documents(m!!.id); section="documents" } }
                     notice="Saved."
                 }
