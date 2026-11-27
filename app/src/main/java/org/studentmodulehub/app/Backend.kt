@@ -168,6 +168,46 @@ class Backend(context: Context) {
         }
     }
 
+    suspend fun downloadDrivePdfThumbnail(fileId: String, folderId: String, destination: java.io.File) {
+        require(fileId.matches(Regex("[a-zA-Z0-9_-]{10,200}")))
+        require(folderId.matches(Regex("[a-zA-Z0-9_-]{10,200}")))
+        val accessToken = client.auth.currentSessionOrNull()?.accessToken
+            ?: throw java.io.IOException("Your session has expired. Sign in again.")
+        withContext(kotlinx.coroutines.Dispatchers.IO) {
+            destination.parentFile?.mkdirs()
+            val connection = java.net.URL("${BuildConfig.SUPABASE_URL}/functions/v1/drive-materials")
+                .openConnection() as java.net.HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 20000
+                connection.readTimeout = 30000
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
+                connection.setRequestProperty("Authorization", "Bearer $accessToken")
+                val payload = org.json.JSONObject().put("action", "thumbnail")
+                    .put("file_id", fileId).put("folder_id", folderId)
+                connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                val status = connection.responseCode
+                if (status !in 200..299) {
+                    val detail = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                    val reason = try { org.json.JSONObject(detail).optString("error") } catch (_: Exception) { "" }
+                    throw java.io.IOException(reason.ifBlank { "PDF preview unavailable (HTTP $status)." })
+                }
+                check(connection.contentType?.startsWith("image/", true) == true) {
+                    "The materials service did not return an image preview."
+                }
+                connection.inputStream.use { input ->
+                    destination.outputStream().buffered().use { output -> input.copyTo(output) }
+                }
+                check(destination.exists() && destination.length() > 0L) { "The PDF preview is empty." }
+            } catch (e: Exception) {
+                destination.delete()
+                throw e
+            } finally { connection.disconnect() }
+        }
+    }
+
     suspend fun drivePdfs(): List<DrivePdf> = driveRequest(org.json.JSONObject().put("action", "list")).let { response ->
         val files = response.optJSONArray("files") ?: JSONArray()
         (0 until files.length()).map { index ->
