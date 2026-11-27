@@ -154,6 +154,41 @@ Deno.serve(async (req) => {
       return json({ folder: { id: folder.id, name: folder.name }, files: data.files ?? [], nextPageToken: data.nextPageToken ?? null });
     }
 
+    if (action === "thumbnail") {
+      const fileId = String(body?.file_id ?? "");
+      const folderId = String(body?.folder_id ?? "");
+      if (!/^[a-zA-Z0-9_-]{10,200}$/.test(fileId) || !/^[a-zA-Z0-9_-]{10,200}$/.test(folderId)) {
+        return json({ error: "Invalid PDF or module folder." }, 400);
+      }
+      const token = await googleAccessToken();
+      const rootId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
+      const folderResponse = await fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(folderId) + "?fields=id,mimeType,parents", {
+        headers: { Authorization: "Bearer " + token },
+      });
+      if (!folderResponse.ok) return json({ error: "Module folder not found." }, 404);
+      const folder = await folderResponse.json();
+      if (folder.mimeType !== "application/vnd.google-apps.folder" || !(folder.parents ?? []).includes(rootId)) {
+        return json({ error: "Invalid module folder." }, 403);
+      }
+      const fileResponse = await fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?fields=id,mimeType,parents,thumbnailLink", {
+        headers: { Authorization: "Bearer " + token },
+      });
+      if (!fileResponse.ok) return json({ error: "PDF not found." }, 404);
+      const file = await fileResponse.json();
+      if (file.mimeType !== "application/pdf" || !(file.parents ?? []).includes(folderId)) {
+        return json({ error: "This PDF does not belong to the selected module folder." }, 403);
+      }
+      if (!file.thumbnailLink) return json({ error: "A preview is not available for this PDF." }, 404);
+      const imageResponse = await fetch(file.thumbnailLink, { headers: { Authorization: "Bearer " + token } });
+      if (!imageResponse.ok || !imageResponse.body) return json({ error: "Google Drive could not provide the PDF preview." }, 502);
+      const contentType = imageResponse.headers.get("Content-Type") ?? "image/jpeg";
+      if (!contentType.startsWith("image/")) return json({ error: "Google Drive returned an invalid preview." }, 502);
+      const headers = new Headers(cors);
+      headers.set("Content-Type", contentType);
+      headers.set("Cache-Control", "private, max-age=86400");
+      return new Response(imageResponse.body, { status: 200, headers });
+    }
+
     if (action === "download_drive_pdf") {
       const fileId = String(body?.file_id ?? "");
       const folderId = String(body?.folder_id ?? "");
