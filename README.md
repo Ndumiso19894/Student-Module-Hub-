@@ -1,24 +1,26 @@
-# Student Module Hub — Stage 4 (debug / verification build)
+# Student Module Hub — Google Drive folder library (folder-based release)
 
 Native Kotlin + Jetpack Compose + Material 3 app, based on the Stage 3 project. The app uses the documented, community-maintained Supabase Kotlin client with a public project URL/publishable key. No secret key or service-role credential is included. Authentication, encrypted session storage and PKCE recovery code from Stage 3 are retained but have not been re-verified on a device in this stage.
 
 ## What is implemented
-- Student catalogue browsing by UNISA college → qualification → module, with search at each browsing level.
-- Student material lists grouped into Study Guides, Tutorial Letters, Assignment Questions, Examination Question Papers, Examination Memorandums, Prescribed Books, Lecture Notes and Other Study Materials. Published PDFs are retrieved through the authenticated private Drive gateway and opened with an installed PDF reader.
+- Student browsing is now folder-based: each first-level folder inside the configured Google Drive study folder is displayed as a module (for example, `FOR3704`).
+- PDFs directly inside each module folder are listed using their original Google Drive filenames and streamed through the authenticated private Drive gateway when a student opens them. PDFs are not copied into Supabase Storage and are not renamed or classified by the Edge Function.
 - Admin dashboard: read-only list of profiles; create/edit/publish qualifications, modules and material records; assign qualifications to colleges, modules to qualifications, and materials to modules; set qualification codes/levels and material categories; link PDFs from the configured private Google Drive folder.
 - The catalogue database and admin editor support official qualification codes, levels, academic years and source URLs, plus module credits/NQF levels/semester and material academic year/semester metadata. Existing records are preserved; qualification college assignments are nullable until an administrator classifies them.
-- Live catalogue import: 340 qualification records distributed across the eight colleges, covering verified 2027 undergraduate, honours, postgraduate diploma, master's and doctoral records. One hundred and eighty-five curriculum-linked modules have been imported across six qualifications/streams using verified 2026 UNISA curricula: BA Honours in Corrections Management (98655), Diploma in Policing (98220), Diploma in Corrections Management (98218), Advanced Diploma in Information Resource Management (90007), Bachelor of Laws (98680) and the stream-specific BEd Mathematics and English option (90104-MTE). This is a verified sample, not the complete UNISA catalogue.
+- The previous UNISA colleges, qualifications and curriculum records remain in the database as an archived catalogue. Student browsing no longer exposes that catalogue; administrators can still open it from the admin panel.
 - SQL row-level security from Stage 3 restricts reads to published records and published parents for students, with admin access to catalogue management. Public signup trigger creates a `student` profile; clients cannot update `role`.
 - Applied Stage 4 migration prevents cascading deletion of modules/documents when a parent is deleted. Delete dependents explicitly first.
 - Student suspension, account editing and role management are deliberately not implemented in the app. This also prevents admins accidentally demoting their own account through the app. Student list does not expose email addresses from auth.users.
 
-## Automatic Google Drive materials importer
+## Google Drive folder-based module library
 
-The private Drive importer recursively scans the configured folder, nested folders and folder shortcuts every five minutes. It discovers new PDFs without relying on filenames, extracts selectable PDF text, and uses Google Drive's indexed full-text search as an OCR-aware fallback for scanned PDFs. Google Drive automatically indexes supported PDFs for search; the importer searches that indexed content for UNISA module codes and material-category terms. If the index is not ready, unclassified files are retried after six hours.
+The configured Google Drive folder is the source of truth. Create one folder per module directly inside it, using the module code as the folder name (for example, `FOR3704`). Put that module's PDFs directly inside its folder. The student app lists those first-level folders as modules and lists PDFs in each folder using their original filenames.
 
-High-confidence, unique module-and-category matches are registered automatically as unpublished materials. Ambiguous matches are held in the administrator review queue, where the module, category and title can be corrected before import. The source files remain in Drive and are not moved or deleted. Non-PDF files are currently counted and inventoried but are not yet registered as downloadable app materials.
+The app does not inspect PDF contents, infer module codes, classify documents, rename files, create catalogue records, or copy PDFs into Supabase Storage. Opening a PDF streams it through the authenticated `drive-materials` Edge Function. That function verifies that the requested module folder is a direct child of the configured root and that the PDF is a direct child of that module folder before streaming it. Students must be signed in. Google Drive remains private; service-account credentials remain server-side.
 
-The scheduled job is Supabase Cron + pg_net. Its private credential is stored in Supabase Vault and a separate RLS-protected table; the Edge Function performs its own scheduled-request or administrator-session authentication. The importer uses the Google Drive read-only scope. The first attempt to create temporary Google Docs for OCR was rejected because Google service accounts have no storage quota, so the implementation uses Drive's built-in indexed text/OCR instead and does not create temporary Drive files.
+The old content-analysis importer is retired. Its scheduled calls return a small deprecation response rather than downloading or parsing PDFs. Existing import candidates, documents, qualification records, module records and college records are preserved. The old catalogue is labelled as archived and is no longer part of student browsing.
+
+Nested subfolders are not yet displayed: place PDFs directly inside each module folder. File renaming is deliberately separate and can later be handled as an optional Google Colab batch-cleanup tool, without blocking publication.
 
 Relevant Google documentation:
 - Drive automatically indexes supported documents, PDFs and images for search: https://developers.google.com/workspace/drive/api/guides/file-metadata
