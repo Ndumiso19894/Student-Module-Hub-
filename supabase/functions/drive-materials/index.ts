@@ -111,6 +111,87 @@ Deno.serve(async (req) => {
     const action = body?.action;
     const isAdmin = profile.role === "admin";
 
+    if (action === "modules") {
+      const rootId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
+      if (!rootId) return json({ error: "Drive folder is not configured." }, 503);
+      const token = await googleAccessToken();
+      const params = new URLSearchParams({
+        q: "'" + rootId.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'",
+        pageSize: "1000", orderBy: "name",
+        fields: "nextPageToken,files(id,name,mimeType,modifiedTime)",
+      });
+      const response = await fetch("https://www.googleapis.com/drive/v3/files?" + params, {
+        headers: { Authorization: "Bearer " + token },
+      });
+      if (!response.ok) return json({ error: "Could not list module folders in Google Drive." }, 502);
+      const data = await response.json();
+      return json({ folders: data.files ?? [], nextPageToken: data.nextPageToken ?? null });
+    }
+
+    if (action === "folder_documents") {
+      const folderId = String(body?.folder_id ?? "");
+      if (!/^[a-zA-Z0-9_-]{10,200}$/.test(folderId)) return json({ error: "Invalid module folder." }, 400);
+      const token = await googleAccessToken();
+      const rootId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
+      const folderResponse = await fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(folderId) + "?fields=id,name,mimeType,parents", {
+        headers: { Authorization: "Bearer " + token },
+      });
+      if (!folderResponse.ok) return json({ error: "Module folder not found." }, 404);
+      const folder = await folderResponse.json();
+      if (folder.mimeType !== "application/vnd.google-apps.folder" || !(folder.parents ?? []).includes(rootId)) {
+        return json({ error: "This folder is not a module folder in the configured study library." }, 403);
+      }
+      const params = new URLSearchParams({
+        q: "'" + folderId.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "' in parents and trashed = false and mimeType = 'application/pdf'",
+        pageSize: "1000", orderBy: "name",
+        fields: "nextPageToken,files(id,name,mimeType,size,modifiedTime)",
+      });
+      const response = await fetch("https://www.googleapis.com/drive/v3/files?" + params, {
+        headers: { Authorization: "Bearer " + token },
+      });
+      if (!response.ok) return json({ error: "Could not list PDFs in this module folder." }, 502);
+      const data = await response.json();
+      return json({ folder: { id: folder.id, name: folder.name }, files: data.files ?? [], nextPageToken: data.nextPageToken ?? null });
+    }
+
+    if (action === "download_drive_pdf") {
+      const fileId = String(body?.file_id ?? "");
+      const folderId = String(body?.folder_id ?? "");
+      if (!/^[a-zA-Z0-9_-]{10,200}$/.test(fileId) || !/^[a-zA-Z0-9_-]{10,200}$/.test(folderId)) {
+        return json({ error: "Invalid PDF or module folder." }, 400);
+      }
+      const token = await googleAccessToken();
+      const rootId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
+      const folderResponse = await fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(folderId) + "?fields=id,mimeType,parents", {
+        headers: { Authorization: "Bearer " + token },
+      });
+      if (!folderResponse.ok) return json({ error: "Module folder not found." }, 404);
+      const folder = await folderResponse.json();
+      if (folder.mimeType !== "application/vnd.google-apps.folder" || !(folder.parents ?? []).includes(rootId)) {
+        return json({ error: "Invalid module folder." }, 403);
+      }
+      const fileResponse = await fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?fields=id,name,mimeType,parents", {
+        headers: { Authorization: "Bearer " + token },
+      });
+      if (!fileResponse.ok) return json({ error: "PDF not found." }, 404);
+      const file = await fileResponse.json();
+      if (file.mimeType !== "application/pdf" || !(file.parents ?? []).includes(folderId)) {
+        return json({ error: "This PDF does not belong to the selected module folder." }, 403);
+      }
+      const pdfResponse = await fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?alt=media", {
+        headers: { Authorization: "Bearer " + token },
+      });
+      if (!pdfResponse.ok || !pdfResponse.body) return json({ error: "Google Drive could not provide this PDF." }, 502);
+      const safeName = String(file.name || "study-material.pdf").replace(/[\\/:*?"<>|\\r\\n]/g, "_").slice(0, 180);
+      const headers = new Headers(cors);
+      headers.set("Content-Type", "application/pdf");
+      headers.set("Content-Disposition", 'attachment; filename="' + safeName.replace(/"/g, "") + '"');
+      headers.set("Cache-Control", "private, no-store");
+      const length = pdfResponse.headers.get("Content-Length");
+      if (length) headers.set("Content-Length", length);
+      return new Response(pdfResponse.body, { status: 200, headers });
+    }
+
     if (action === "list") {
       if (!isAdmin) return json({ error: "Administrator access required." }, 403);
       const folderId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
