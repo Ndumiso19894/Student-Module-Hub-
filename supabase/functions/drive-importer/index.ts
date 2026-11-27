@@ -130,6 +130,7 @@ async function driveInventory(token: string, rootId: string) {
   const visited = new Set<string>();
   const pdfs: any[] = [];
   const mimeCounts: Record<string, number> = {};
+  const folderNames: Record<string, string> = {};
   let totalFiles = 0;
   while (queue.length && visited.size < 5000) {
     const batch: string[] = [];
@@ -142,6 +143,7 @@ async function driveInventory(token: string, rootId: string) {
     for (const children of pages) {
       for (const item of children) {
         if (item.mimeType === "application/vnd.google-apps.folder") {
+          folderNames[item.id] = item.name ?? "";
           if (!visited.has(item.id)) queue.push(item.id);
         } else if (item.mimeType === "application/vnd.google-apps.shortcut") {
           const targetId = item.shortcutDetails?.targetId;
@@ -171,7 +173,7 @@ async function driveInventory(token: string, rootId: string) {
       }
     }
   }
-  return { pdfs, totalFiles, foldersVisited: visited.size, mimeCounts };
+  return { pdfs, totalFiles, foldersVisited: visited.size, mimeCounts, folderNames };
 }
 
 async function extractPdfText(token: string, fileId: string): Promise<{ text: string; pages: number; frontMatter: string }> {
@@ -204,6 +206,22 @@ async function extractPdfText(token: string, fileId: string): Promise<{ text: st
   return { text, pages, frontMatter: frontMatterPieces.join("\n") };
 }
 
+
+async function storeDrivePdf(token: string, fileId: string, moduleId: string, admin: any): Promise<string> {
+  const response = await fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?alt=media", {
+    headers: { Authorization: "Bearer " + token },
+  });
+  if (!response.ok || !response.body) throw new Error("Google Drive could not provide the PDF for storage.");
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!bytes.length || bytes.length > 50 * 1024 * 1024) throw new Error("PDF is empty or exceeds the 50 MB storage limit.");
+  const path = moduleId + "/" + fileId + ".pdf";
+  const { error } = await admin.storage.from("study-materials").upload(path, bytes, {
+    contentType: "application/pdf", upsert: true, cacheControl: "3600",
+  });
+  if (error) throw new Error("Could not save the PDF in app storage: " + error.message);
+  return path;
+}
+
 const categories = [
   { name: "Tutorial Letters", terms: ["tutorial letter", "tutorial letters", "tl01", "tl 01"] },
   { name: "Assignment Questions", terms: ["assignment", "assessment", "compulsory assignment", "assignment question"] },
@@ -230,7 +248,7 @@ function inferTitle(text: string, fileName: string, moduleTitle = ""): string {
 
 function inferCategoryFromFilename(fileName: string): string | null {
   const name = fileName.toLowerCase().replace(/[_-]+/g, " ");
-  if (/\b(tutorial letter|tutorial letters|tl\s*0?1)\b/.test(name)) return "Tutorial Letters";
+  if (/\b(tutorial letter|tutorial letters|tl\\s*0?1)\b/.test(name)) return "Tutorial Letters";
   if (/\b(assignment|assessment)\b/.test(name)) return "Assignment Questions";
   if (/\b(memorandum|memoranda|marking guideline|marking guidelines)\b/.test(name)) return "Examination Memorandums";
   if (/\b(examination paper|exam paper|exam questions|examination questions)\b/.test(name)) return "Examination Question Papers";
@@ -303,6 +321,13 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const action = String(body?.action ?? "");
     if (action === "scan") {
+      return json({
+        deprecated: true,
+        scanned: 0,
+        message: "Content-analysis importing is retired. Student Module Hub now reads module folders and PDFs directly from Google Drive."
+      });
+    }
+    if (action === "legacy_scan_disabled") {
       const rootId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
       if (!rootId) return json({ error: "Drive folder is not configured." }, 503);
       const token = await googleAccessToken();
@@ -324,7 +349,13 @@ Deno.serve(async (req) => {
         }
         return false;
       });
-      const limit = Math.max(1, Math.min(Number(body?.limit ?? 8), 15));
+      pending.sort((a: any, b: any) => {
+        const aKnown = known.get(a.id), bKnown = known.get(b.id);
+        if (!aKnown && bKnown) return -1;
+        if (aKnown && !bKnown) return 1;
+        return new Date(aKnown?.last_scanned_at ?? 0).getTime() - new Date(bKnown?.last_scanned_at ?? 0).getTime();
+      });
+      const limit = Math.max(1, Math.min(Number(body?.limit ?? 20), 20));
       const batch = pending.slice(0, limit);
       const results: any[] = [];
       for (const file of batch) {
@@ -341,7 +372,8 @@ Deno.serve(async (req) => {
         } catch (error) {
           parseError = error instanceof Error ? error.message : "PDF text extraction failed.";
         }
-        let found = identify(extracted, modules ?? [], typeof frontMatter === "string" ? frontMatter : extracted);
+        const parentFolderName = inventory.folderNames[file.parents?.[0] ?? ""] ?? "";
+        let found = identify(extracted + "\\n" + file.name + "\\n" + parentFolderName, modules ?? [], typeof frontMatter === "string" ? frontMatter : extracted);
         if (!parseError && found.codeGroups.length === 0) {
           indexedSearchUsed = true;
           const indexedCode = await findIndexedModuleCode(token, file.parents?.[0] ?? rootId, file.id, modules ?? []);
@@ -389,8 +421,12 @@ Deno.serve(async (req) => {
         if (saveError) throw new Error("Could not save a scan result.");
         if (status === "pending" && found.module && found.categoryMatches.length === 1) {
           const { data: existingSource } = await admin.from("document_sources")
-            .select("document_id").eq("external_file_id", file.id).maybeSingle();
+            .select("document_id,storage_path").eq("external_file_id", file.id).maybeSingle();
           if (existingSource?.document_id) {
+            if (!existingSource.storage_path) {
+              const storagePath = await storeDrivePdf(token, file.id, found.module.id, admin);
+              await admin.from("document_sources").update({ storage_path: storagePath, updated_at: new Date().toISOString() }).eq("document_id", existingSource.document_id);
+            }
             await admin.from("drive_import_candidates").update({
               status: "imported", imported_document_id: existingSource.document_id, updated_at: new Date().toISOString(),
             }).eq("id", saved.id);
@@ -399,6 +435,7 @@ Deno.serve(async (req) => {
             const { data: module } = await admin.from("modules")
               .select("id,code,semester").eq("id", found.module.id).maybeSingle();
             if (module) {
+              const storagePath = await storeDrivePdf(token, file.id, module.id, admin);
               const suggestedTitle = inferTitle(extracted, file.name, found.module?.title ?? "");
               const { data: document, error: docError } = await admin.from("documents").insert({
                 module_id: module.id,
@@ -416,6 +453,7 @@ Deno.serve(async (req) => {
                   mime_type: "application/pdf",
                   size_bytes: file.size ? Number(file.size) : null,
                   drive_modified_at: file.modifiedTime ?? null,
+                  storage_path: storagePath,
                   updated_at: new Date().toISOString(),
                 }, { onConflict: "document_id" });
                 if (!sourceError) {
@@ -491,11 +529,14 @@ Deno.serve(async (req) => {
       if (!module) return json({ error: "Selected module does not exist." }, 404);
       const title = (requestedTitle || candidate.suggested_title || candidate.file_name || "UNISA study material")
         .replace(/\.pdf$/i, "").slice(0, 240);
+      const token = await googleAccessToken();
+      const storagePath = await storeDrivePdf(token, candidate.drive_file_id, moduleId, admin);
       const { data: existingSource } = await admin.from("document_sources")
         .select("document_id").eq("external_file_id", candidate.drive_file_id).maybeSingle();
       let documentId = existingSource?.document_id ?? null;
       if (existingSource?.document_id) {
         documentId = existingSource.document_id;
+        await admin.from("document_sources").update({ storage_path: storagePath, updated_at: new Date().toISOString() }).eq("document_id", documentId);
         const { error: updateDocumentError } = await admin.from("documents").update({
           module_id: moduleId, title,
           description: "Imported from Google Drive. Original filename: " + candidate.file_name,
@@ -512,7 +553,7 @@ Deno.serve(async (req) => {
         documentId = document.id;
         const { error: sourceError } = await admin.from("document_sources").upsert({
           document_id: documentId, provider: "google_drive",
-          external_file_id: candidate.drive_file_id, mime_type: "application/pdf",
+          external_file_id: candidate.drive_file_id, mime_type: "application/pdf", storage_path: storagePath,
           size_bytes: candidate.size_bytes, drive_modified_at: candidate.drive_modified_at,
           updated_at: new Date().toISOString(),
         }, { onConflict: "document_id" });
