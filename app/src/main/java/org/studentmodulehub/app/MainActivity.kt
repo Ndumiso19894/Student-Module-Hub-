@@ -89,6 +89,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     var selectedDriveModule by remember { mutableStateOf<DriveModuleFolder?>(null) }
     var drivePdfs by remember { mutableStateOf<List<DriveFolderPdf>>(emptyList()) }
     var driveDisplayMode by remember { mutableStateOf("grid") }
+    var drivePdfPage by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     fun clearMessage() { message = "" }
     fun go(value: String) { clearMessage(); screen = value }
@@ -304,9 +305,11 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                         FilterChip(selected=driveDisplayMode=="list", onClick={ driveDisplayMode="list" }, label={ Text("List") })
                     }
                     val visiblePdfs = drivePdfs.filter { cleanDrivePdfTitle(it.name, selectedDriveModule?.name.orEmpty()).contains(catalogueSearch, true) || it.name.contains(catalogueSearch, true) }
+                    val currentPdfPage = drivePdfPage.coerceIn(0, (visiblePdfs.size - 1).coerceAtLeast(0) / 8)
+                    val pagePdfs = visiblePdfs.drop(currentPdfPage * 8).take(8)
                     if (!busy && visiblePdfs.isEmpty()) Text(if (catalogueSearch.isBlank()) "No PDF documents are in this folder yet." else "No documents match your search.")
                     if (driveDisplayMode == "grid") {
-                        visiblePdfs.chunked(2).forEach { pair ->
+                        pagePdfs.chunked(2).forEach { pair ->
                             Row(horizontalArrangement=Arrangement.spacedBy(12.dp), modifier=Modifier.fillMaxWidth()) {
                                 pair.forEach { pdf ->
                                     Card(modifier=Modifier.weight(1f)) {
@@ -332,7 +335,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                             }
                         }
                     } else {
-                        visiblePdfs.forEach { pdf ->
+                        pagePdfs.forEach { pdf ->
                             Card(modifier=Modifier.fillMaxWidth()) {
                                 Row(Modifier.padding(10.dp), horizontalArrangement=Arrangement.spacedBy(12.dp), verticalAlignment=Alignment.CenterVertically) {
                                     DrivePdfPreviewThumbnail(pdf, selectedDriveModule?.id.orEmpty(), backend, Modifier.width(88.dp).height(112.dp))
@@ -354,6 +357,13 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                                     }
                                 }
                             }
+                        }
+                    }
+                    if (visiblePdfs.size > 8) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween, verticalAlignment=Alignment.CenterVertically) {
+                            TextButton(enabled=currentPdfPage > 0, onClick={ drivePdfPage=(currentPdfPage-1).coerceAtLeast(0) }) { Text("Previous") }
+                            Text("Page ${currentPdfPage+1} of ${(visiblePdfs.size+7)/8}", color=Muted, style=MaterialTheme.typography.labelMedium)
+                            TextButton(enabled=(currentPdfPage+1)*8 < visiblePdfs.size, onClick={ drivePdfPage=currentPdfPage+1 }) { Text("Next") }
                         }
                     }
                     OutlinedButton(onClick={ openDriveModules() }) { Text("Back to modules") }
