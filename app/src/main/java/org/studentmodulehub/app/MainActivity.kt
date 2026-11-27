@@ -79,6 +79,9 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     var searchQualifications by remember { mutableStateOf<List<Qualification>>(emptyList()) }
     var searchModules by remember { mutableStateOf<List<Module>>(emptyList()) }
     var localDownloads by remember { mutableStateOf<List<File>>(emptyList()) }
+    var driveModules by remember { mutableStateOf<List<DriveModuleFolder>>(emptyList()) }
+    var selectedDriveModule by remember { mutableStateOf<DriveModuleFolder?>(null) }
+    var drivePdfs by remember { mutableStateOf<List<DriveFolderPdf>>(emptyList()) }
     val scope = rememberCoroutineScope()
     fun clearMessage() { message = "" }
     fun go(value: String) { clearMessage(); screen = value }
@@ -125,17 +128,15 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
         if (demo) modules = listOf(Module("sample-1", "Introduction to Management", "BUS101", "Sample module for navigation testing.", true, qualificationId = q.id), Module("sample-2", "Business Communication", "BUS102", "Sample module for navigation testing.", true, qualificationId = q.id))
         else run { modules = backend.modules(q.id) }
     }
-    fun openSearch() {
-        go("search"); searchQuery = ""
-        if (demo) {
-            searchColleges = listOf(College("SAMPLE", "Sample College"))
-            searchQualifications = listOf(Qualification("sample", "Diploma in Business Studies", "Sample qualification", true, "SAMPLE"))
-            searchModules = listOf(Module("sample-1", "Introduction to Management", "BUS101", "Sample module", true, qualificationId = "sample"))
-        } else {
-            searchColleges = emptyList(); searchQualifications = emptyList(); searchModules = emptyList()
-            run { searchColleges = backend.colleges(); searchQualifications = backend.qualifications(); searchModules = backend.allModules() }
-        }
+    fun openDriveModules() {
+        go("driveModules"); catalogueSearch = ""; driveModules = emptyList()
+        if (!demo) run { driveModules = backend.driveModuleFolders() }
     }
+    fun openDriveModule(folder: DriveModuleFolder) {
+        selectedDriveModule = folder; go("driveModuleDetail"); drivePdfs = emptyList()
+        if (!demo) run { drivePdfs = backend.driveFolderPdfs(folder.id) }
+    }
+    fun openSearch() = openDriveModules()
     LaunchedEffect(Unit) {
         if (backend.configured && callback == null) {
             busy = true
@@ -169,10 +170,8 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
         when (screen) {
             "login", "register", "forgot" -> go("welcome")
             "resetPassword" -> { run { backend.logout(); profile = null; screen = "login" } }
-            "modules" -> go("qualifications")
-            "moduleDetail" -> go("modules")
-            "qualifications" -> go("colleges")
-            "colleges", "profile", "admin", "search", "downloads" -> go("home")
+            "driveModuleDetail" -> go("driveModules")
+            "driveModules", "colleges", "qualifications", "modules", "moduleDetail", "profile", "admin", "search", "downloads" -> go("home")
             "home" -> if (demo) { demo = false; go("welcome") } else go("profile")
             else -> go("welcome")
         }
@@ -192,15 +191,15 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     Text("Student Module Hub", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Navy)
                 } },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White),
-                actions = { IconButton(onClick = ::openSearch) { Icon(Icons.Filled.Search, contentDescription = "Search catalogue", tint = Blue) } }
+                actions = { IconButton(onClick = ::openSearch) { Icon(Icons.Filled.Search, contentDescription = "Search modules", tint = Blue) } }
             )
         }
     }, bottomBar = {
-        if (screen in listOf("home", "colleges", "qualifications", "modules", "moduleDetail", "search", "downloads", "profile", "admin")) {
+        if (screen in listOf("home", "driveModules", "driveModuleDetail", "downloads", "profile", "admin")) {
             NavigationBar(containerColor = Color.White, tonalElevation = 6.dp) {
                 NavigationBarItem(selected = screen == "home", onClick = { go("home") }, icon = { Icon(Icons.Filled.Home, contentDescription = "Home") }, label = { Text("Home") })
-                NavigationBarItem(selected = screen in listOf("colleges", "qualifications", "modules", "moduleDetail"), onClick = ::openQualifications, icon = { Icon(Icons.Filled.School, contentDescription = "Browse colleges") }, label = { Text("Browse") })
-                NavigationBarItem(selected = screen == "search", onClick = ::openSearch, icon = { Icon(Icons.Filled.Search, contentDescription = "Search") }, label = { Text("Search") })
+                NavigationBarItem(selected = screen in listOf("driveModules", "driveModuleDetail"), onClick = ::openDriveModules, icon = { Icon(Icons.Filled.School, contentDescription = "Browse modules") }, label = { Text("Modules") })
+                NavigationBarItem(selected = false, onClick = ::openDriveModules, icon = { Icon(Icons.Filled.Search, contentDescription = "Find modules") }, label = { Text("Find") })
                 NavigationBarItem(selected = screen == "downloads", onClick = ::openDownloads, icon = { Icon(Icons.Filled.Download, contentDescription = "Downloads") }, label = { Text("Files") })
                 NavigationBarItem(selected = screen == "profile" || screen == "admin", onClick = { go("profile") }, icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") }, label = { Text("Profile") })
             }
@@ -263,22 +262,55 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Navy), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("FIND YOUR NEXT RESOURCE", color = Color(0xFFB8D1FF), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            Text("Search the UNISA catalogue", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            Text("Look up colleges, qualifications, module codes and study materials.", color = Color(0xFFE2E8F0))
-                            Button(onClick = ::openSearch, colors = ButtonDefaults.buttonColors(containerColor = Blue)) { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Icon(Icons.Filled.Search, contentDescription = null); Text("Search catalogue") } }
+                            Text("Browse study modules", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text("Each module folder and its PDFs appear here just as they are organised in Google Drive.", color = Color(0xFFE2E8F0))
+                            Button(onClick = ::openDriveModules, colors = ButtonDefaults.buttonColors(containerColor = Blue)) { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Icon(Icons.Filled.School, contentDescription = null); Text("Browse modules") } }
                         }
                     }
                     Text("QUICK ACCESS", color = Blue, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                        HomeTile("Browse colleges", "Explore all colleges", "▦", ::openQualifications, Modifier.weight(1f))
+                        HomeTile("Browse modules", "Open Drive module folders", "▦", ::openDriveModules, Modifier.weight(1f))
                         HomeTile("My profile", "Account details", "●", { go("profile") }, Modifier.weight(1f))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                         HomeTile("My files", "Recently opened PDFs", "↓", ::openDownloads, Modifier.weight(1f))
-                        HomeTile("Search", "Find a module", "⌕", ::openSearch, Modifier.weight(1f))
+                        HomeTile("Find a module", "Search module folders", "⌕", ::openDriveModules, Modifier.weight(1f))
                     }
                     if (!demo && profile?.role == "admin") HubCard("Administrator tools", "Manage catalogue records and study resources.", "Open admin dashboard", { go("admin") })
                     Text("Browse from college to qualification, module and its study materials.", style = MaterialTheme.typography.bodySmall, color = Muted)
+                }
+                "driveModules" -> {
+                    PageHeader("Study modules", "Modules are taken directly from your Google Drive folders.")
+                    OutlinedTextField(value=catalogueSearch, onValueChange={ catalogueSearch=it }, label={ Text("Search module code or folder name") }, modifier=Modifier.fillMaxWidth(), singleLine=true)
+                    if (!busy && driveModules.isEmpty()) Text("No module folders found. Add folders such as FOR3704 to the main study folder in Google Drive.")
+                    driveModules.filter { it.name.contains(catalogueSearch, true) }.forEach { folder ->
+                        HubCard(folder.name, "Google Drive module folder", "Open study materials") { openDriveModule(folder) }
+                    }
+                    OutlinedButton(onClick={ openDriveModules() }, enabled=!busy) { Text("Refresh module folders") }
+                }
+                "driveModuleDetail" -> {
+                    PageHeader(selectedDriveModule?.name ?: "Module materials", "PDFs shown with their original Google Drive filenames.")
+                    if (!busy && drivePdfs.isEmpty()) Text("No PDF documents are in this folder yet.")
+                    drivePdfs.forEach { pdf ->
+                        Card(modifier=Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                Text(pdf.name, style=MaterialTheme.typography.titleMedium, color=Navy)
+                                Text("PDF" + if (pdf.sizeBytes.isNotBlank()) " · " + pdf.sizeBytes + " bytes" else "", style=MaterialTheme.typography.bodySmall, color=Muted)
+                                Button(enabled=!busy && !demo && selectedDriveModule != null, onClick={
+                                    run {
+                                        val folder = File(context.cacheDir, "study-materials").apply { mkdirs() }
+                                        val safeName = pdf.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(150).ifBlank { "study-material.pdf" }
+                                        val file = File(folder, safeName)
+                                        backend.downloadDrivePdf(pdf.id, selectedDriveModule!!.id, file)
+                                        localDownloads = (listOf(file) + localDownloads.filterNot { it.absolutePath == file.absolutePath }).take(30)
+                                        val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+                                        context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                                    }
+                                }) { Text("Open PDF") }
+                            }
+                        }
+                    }
+                    OutlinedButton(onClick={ openDriveModules() }) { Text("Back to modules") }
                 }
                 "colleges" -> {
                     PageHeader("UNISA colleges", "Choose a college to browse its qualifications.")
