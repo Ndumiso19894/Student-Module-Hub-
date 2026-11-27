@@ -2,8 +2,6 @@ package org.studentmodulehub.app
 
 import android.os.Bundle
 import android.graphics.Bitmap
-import android.graphics.pdf.PdfRenderer
-import android.os.ParcelFileDescriptor
 import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -522,19 +520,9 @@ private fun DrivePdfPreviewThumbnail(pdf: DriveFolderPdf, folderId: String, back
             try {
                 val cache = File(context.cacheDir, "pdf-previews").apply { mkdirs() }
                 val safeId = pdf.id.hashCode().toUInt().toString()
-                val file = File(cache, "$safeId.pdf")
-                if (!file.exists() || file.length() == 0L) backend.downloadDrivePdf(pdf.id, folderId, file)
-                ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
-                    PdfRenderer(descriptor).use { renderer ->
-                        if (renderer.pageCount == 0) null else renderer.openPage(0).use { page ->
-                            val width = 420
-                            val height = (width * page.height.toFloat() / page.width).toInt().coerceAtLeast(1)
-                            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
-                                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                            }
-                        }
-                    }
-                }
+                val file = File(cache, "$safeId.jpg")
+                if (!file.exists() || file.length() == 0L) backend.downloadDrivePdfThumbnail(pdf.id, folderId, file)
+                android.graphics.BitmapFactory.decodeFile(file.absolutePath)
             } catch (_: Exception) { null }
         }
     }
