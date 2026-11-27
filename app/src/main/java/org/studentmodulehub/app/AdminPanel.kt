@@ -19,6 +19,7 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
     var ds by remember { mutableStateOf<List<Document>>(emptyList()) }
     var students by remember { mutableStateOf<List<StudentAccount>>(emptyList()) }
     var driveFiles by remember { mutableStateOf<List<DrivePdf>>(emptyList()) }
+    var driveFolders by remember { mutableStateOf<List<DriveModuleFolder>>(emptyList()) }
     var importCandidates by remember { mutableStateOf<List<DriveImportCandidate>>(emptyList()) }
     var importModules by remember { mutableStateOf<List<Module>>(emptyList()) }
     var scanSummary by remember { mutableStateOf("") }
@@ -54,9 +55,24 @@ fun AdminPanel(backend: Backend, onExit: () -> Unit) {
     when(section) {
         "menu" -> {
             HubCard("Students", "View registered profiles and roles.", "View students") { section="students"; job { students = backend.students() } }
-            HubCard("Drive auto-importer", "Scan PDF contents, identify UNISA modules and review suggested matches.", "Open importer") { section="importer"; job { importModules = backend.allModules(); importCandidates = backend.driveImportQueue() } }
-            HubCard("Qualifications & modules", "Create and maintain the catalogue and document metadata.", "Manage catalogue") { loadQualifications() }
+            HubCard("Google Drive module folders", "Student materials are published directly from folders named with module codes. No PDF classification or copying is required.", "View module folders") { section="driveFolders"; job { driveFolders = backend.driveModuleFolders() } }
+            HubCard("Archived UNISA catalogue", "The previous colleges, qualifications and curriculum records are preserved but hidden from student browsing.", "Open archived catalogue") { loadQualifications() }
             OutlinedButton(onClick=onExit) { Text("Back to dashboard") }
+        }
+        "driveFolders" -> {
+            Text("Google Drive · Module folders", style=MaterialTheme.typography.titleLarge)
+            Text("Create a folder directly inside the configured study library and name it with the module code, for example FOR3704. Put PDFs inside it. The app displays the folder and original PDF filenames automatically.")
+            OutlinedButton(enabled=!busy, onClick={ job { driveFolders = backend.driveModuleFolders() } }) { Text("Refresh folders") }
+            if (!busy && driveFolders.isEmpty()) Text("No module folders found in the configured Drive folder.")
+            driveFolders.forEach { folder ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text(folder.name, style=MaterialTheme.typography.titleMedium)
+                        Text("Google Drive folder", style=MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            OutlinedButton(onClick={ section="menu" }) { Text("Back to administrator tools") }
         }
         "importer" -> {
             Text("Google Drive · Automatic material identification", style=MaterialTheme.typography.titleLarge)
