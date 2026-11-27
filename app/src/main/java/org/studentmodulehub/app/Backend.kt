@@ -109,6 +109,65 @@ class Backend(context: Context) {
         return (0 until rows.length()).map { rows.getJSONObject(it).let { o -> Document(o.getString("id"), o.getString("title"), o.optString("description"), o.optBoolean("published"), o.optString("category", "Other Study Materials"),
             if (o.isNull("academic_year")) null else o.optInt("academic_year"), o.optString("semester")) } }.sortedBy { it.title }
     }
+    suspend fun driveModuleFolders(): List<DriveModuleFolder> {
+        val response = driveRequest(org.json.JSONObject().put("action", "modules"))
+        val rows = response.optJSONArray("folders") ?: JSONArray()
+        return (0 until rows.length()).map { i ->
+            val row = rows.getJSONObject(i)
+            DriveModuleFolder(row.getString("id"), row.getString("name"))
+        }.sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
+    }
+
+    suspend fun driveFolderPdfs(folderId: String): List<DriveFolderPdf> {
+        require(folderId.matches(Regex("[a-zA-Z0-9_-]{10,200}")))
+        val response = driveRequest(org.json.JSONObject().put("action", "folder_documents").put("folder_id", folderId))
+        val rows = response.optJSONArray("files") ?: JSONArray()
+        return (0 until rows.length()).map { i ->
+            val row = rows.getJSONObject(i)
+            DriveFolderPdf(row.getString("id"), row.getString("name"), row.optString("size"), row.optString("modifiedTime"))
+        }.sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
+    }
+
+    suspend fun downloadDrivePdf(fileId: String, folderId: String, destination: java.io.File) {
+        require(fileId.matches(Regex("[a-zA-Z0-9_-]{10,200}")))
+        require(folderId.matches(Regex("[a-zA-Z0-9_-]{10,200}")))
+        val accessToken = client.auth.currentSessionOrNull()?.accessToken
+            ?: throw java.io.IOException("Your session has expired. Sign in again.")
+        withContext(kotlinx.coroutines.Dispatchers.IO) {
+            destination.parentFile?.mkdirs()
+            val connection = java.net.URL("${BuildConfig.SUPABASE_URL}/functions/v1/drive-materials")
+                .openConnection() as java.net.HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 20000
+                connection.readTimeout = 120000
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
+                connection.setRequestProperty("Authorization", "Bearer $accessToken")
+                val payload = org.json.JSONObject().put("action", "download_drive_pdf")
+                    .put("file_id", fileId).put("folder_id", folderId)
+                connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                val status = connection.responseCode
+                if (status !in 200..299) {
+                    val detail = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                    val reason = try { org.json.JSONObject(detail).optString("error") } catch (_: Exception) { "" }
+                    throw java.io.IOException(reason.ifBlank { "PDF download failed (HTTP $status)." })
+                }
+                check(connection.contentType?.contains("application/pdf", true) == true) {
+                    "The materials service did not return a PDF."
+                }
+                connection.inputStream.use { input ->
+                    destination.outputStream().buffered().use { output -> input.copyTo(output) }
+                }
+                check(destination.exists() && destination.length() > 0L) { "The PDF is empty." }
+            } catch (e: Exception) {
+                destination.delete()
+                throw e
+            } finally { connection.disconnect() }
+        }
+    }
+
     suspend fun drivePdfs(): List<DrivePdf> = driveRequest(org.json.JSONObject().put("action", "list")).let { response ->
         val files = response.optJSONArray("files") ?: JSONArray()
         (0 until files.length()).map { index ->
@@ -290,6 +349,8 @@ class BackendException(val code: Int): Exception("Service request failed (HTTP $
 data class College(val id: String, val name: String)
 data class Document(val id: String, val title: String, val description: String, val published: Boolean, val category: String = "Other Study Materials", val academicYear: Int? = null, val semester: String = "")
 data class DrivePdf(val id: String, val name: String, val sizeBytes: String, val modifiedAt: String)
+data class DriveModuleFolder(val id: String, val name: String)
+data class DriveFolderPdf(val id: String, val name: String, val sizeBytes: String, val modifiedAt: String)
 data class StudentAccount(val id: String, val name: String, val role: String, val createdAt: String)
 data class Profile(val id: String, val name: String, val email: String, val role: String)
 data class Qualification(val id: String, val title: String, val description: String, val published: Boolean, val collegeId: String = "", val qualificationCode: String = "", val level: String = "", val academicYear: Int? = null, val officialUrl: String = "")
