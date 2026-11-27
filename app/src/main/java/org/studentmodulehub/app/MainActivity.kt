@@ -215,7 +215,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     Spacer(Modifier.height(26.dp)); Brand()
                     Spacer(Modifier.height(12.dp))
                     Text("Your studies,\nall in one place.", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = Navy)
-                    Text("A simple space to explore your qualifications and modules.", style = MaterialTheme.typography.bodyLarge, color = Color(0xFF536477))
+                    Text("A simple place to find your study modules and learning materials.", style = MaterialTheme.typography.bodyLarge, color = Color(0xFF536477))
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = { go("login") }, modifier = Modifier.fillMaxWidth(), enabled = !busy) { Text("Student sign in") }
                     OutlinedButton(onClick = { go("register") }, modifier = Modifier.fillMaxWidth(), enabled = !busy) { Text("Create an account") }
@@ -277,7 +277,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                         HomeTile("Find a module", "Search module folders", "⌕", ::openDriveModules, Modifier.weight(1f))
                     }
                     if (!demo && profile?.role == "admin") HubCard("Administrator tools", "Manage catalogue records and study resources.", "Open admin dashboard", { go("admin") })
-                    Text("Browse from college to qualification, module and its study materials.", style = MaterialTheme.typography.bodySmall, color = Muted)
+                    Text("Browse modules directly from the study folders in Google Drive.", style = MaterialTheme.typography.bodySmall, color = Muted)
                 }
                 "driveModules" -> {
                     PageHeader("Study modules", "Modules are taken directly from your Google Drive folders.")
