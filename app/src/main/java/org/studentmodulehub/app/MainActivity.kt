@@ -1,11 +1,15 @@
 package org.studentmodulehub.app
 
 import android.os.Bundle
+import android.graphics.Bitmap
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
 import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +28,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -33,6 +39,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import java.io.File
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private val Navy = Color(0xFF172554)
 private val Blue = Color(0xFF2563EB)
@@ -82,6 +90,7 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
     var driveModules by remember { mutableStateOf<List<DriveModuleFolder>>(emptyList()) }
     var selectedDriveModule by remember { mutableStateOf<DriveModuleFolder?>(null) }
     var drivePdfs by remember { mutableStateOf<List<DriveFolderPdf>>(emptyList()) }
+    var driveDisplayMode by remember { mutableStateOf("grid") }
     val scope = rememberCoroutineScope()
     fun clearMessage() { message = "" }
     fun go(value: String) { clearMessage(); screen = value }
@@ -289,24 +298,63 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                     OutlinedButton(onClick={ openDriveModules() }, enabled=!busy) { Text("Refresh module folders") }
                 }
                 "driveModuleDetail" -> {
-                    PageHeader(selectedDriveModule?.name ?: "Module materials", "PDFs shown with their original Google Drive filenames.")
-                    if (!busy && drivePdfs.isEmpty()) Text("No PDF documents are in this folder yet.")
-                    drivePdfs.forEach { pdf ->
-                        Card(modifier=Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                                Text(pdf.name, style=MaterialTheme.typography.titleMedium, color=Navy)
-                                Text("PDF" + if (pdf.sizeBytes.isNotBlank()) " · " + pdf.sizeBytes + " bytes" else "", style=MaterialTheme.typography.bodySmall, color=Muted)
-                                Button(enabled=!busy && !demo && selectedDriveModule != null, onClick={
-                                    run {
-                                        val folder = File(context.cacheDir, "study-materials").apply { mkdirs() }
-                                        val safeName = pdf.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(150).ifBlank { "study-material.pdf" }
-                                        val file = File(folder, safeName)
-                                        backend.downloadDrivePdf(pdf.id, selectedDriveModule!!.id, file)
-                                        localDownloads = (listOf(file) + localDownloads.filterNot { it.absolutePath == file.absolutePath }).take(30)
-                                        val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
-                                        context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                    PageHeader(selectedDriveModule?.name ?: "Module materials", "Search readable document titles. Original Google Drive filenames are preserved.")
+                    OutlinedTextField(value=catalogueSearch, onValueChange={ catalogueSearch=it }, label={ Text("Search documents") }, modifier=Modifier.fillMaxWidth(), singleLine=true)
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp), verticalAlignment=Alignment.CenterVertically) {
+                        Text("Display", color=Muted, style=MaterialTheme.typography.labelLarge)
+                        FilterChip(selected=driveDisplayMode=="grid", onClick={ driveDisplayMode="grid" }, label={ Text("Thumbnails") })
+                        FilterChip(selected=driveDisplayMode=="list", onClick={ driveDisplayMode="list" }, label={ Text("List") })
+                    }
+                    val visiblePdfs = drivePdfs.filter { cleanDrivePdfTitle(it.name, selectedDriveModule?.name.orEmpty()).contains(catalogueSearch, true) || it.name.contains(catalogueSearch, true) }
+                    if (!busy && visiblePdfs.isEmpty()) Text(if (catalogueSearch.isBlank()) "No PDF documents are in this folder yet." else "No documents match your search.")
+                    if (driveDisplayMode == "grid") {
+                        visiblePdfs.chunked(2).forEach { pair ->
+                            Row(horizontalArrangement=Arrangement.spacedBy(12.dp), modifier=Modifier.fillMaxWidth()) {
+                                pair.forEach { pdf ->
+                                    Card(modifier=Modifier.weight(1f)) {
+                                        Column(Modifier.padding(10.dp), verticalArrangement=Arrangement.spacedBy(7.dp)) {
+                                            DrivePdfPreviewThumbnail(pdf, selectedDriveModule?.id.orEmpty(), backend, Modifier.fillMaxWidth().height(150.dp))
+                                            Text(cleanDrivePdfTitle(pdf.name, selectedDriveModule?.name.orEmpty()), style=MaterialTheme.typography.titleSmall, color=Navy, maxLines=2)
+                                            Text(drivePdfCategory(pdf.name), style=MaterialTheme.typography.labelSmall, color=Blue)
+                                            Button(enabled=!busy && !demo && selectedDriveModule != null, onClick={
+                                                run {
+                                                    val folder = File(context.cacheDir, "study-materials").apply { mkdirs() }
+                                                    val safeName = pdf.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(150).ifBlank { "study-material.pdf" }
+                                                    val file = File(folder, safeName)
+                                                    backend.downloadDrivePdf(pdf.id, selectedDriveModule!!.id, file)
+                                                    localDownloads = (listOf(file) + localDownloads.filterNot { it.absolutePath == file.absolutePath }).take(30)
+                                                    val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+                                                    context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                                                }
+                                            }, modifier=Modifier.fillMaxWidth()) { Text("Open") }
+                                        }
                                     }
-                                }) { Text("Open PDF") }
+                                }
+                                if (pair.size == 1) Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    } else {
+                        visiblePdfs.forEach { pdf ->
+                            Card(modifier=Modifier.fillMaxWidth()) {
+                                Row(Modifier.padding(10.dp), horizontalArrangement=Arrangement.spacedBy(12.dp), verticalAlignment=Alignment.CenterVertically) {
+                                    DrivePdfPreviewThumbnail(pdf, selectedDriveModule?.id.orEmpty(), backend, Modifier.width(88.dp).height(112.dp))
+                                    Column(Modifier.weight(1f), verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                                        Text(cleanDrivePdfTitle(pdf.name, selectedDriveModule?.name.orEmpty()), style=MaterialTheme.typography.titleSmall, color=Navy)
+                                        Text(drivePdfCategory(pdf.name), style=MaterialTheme.typography.labelSmall, color=Blue)
+                                        Text("Original: ${pdf.name}", style=MaterialTheme.typography.bodySmall, color=Muted, maxLines=2)
+                                        Button(enabled=!busy && !demo && selectedDriveModule != null, onClick={
+                                            run {
+                                                val folder = File(context.cacheDir, "study-materials").apply { mkdirs() }
+                                                val safeName = pdf.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(150).ifBlank { "study-material.pdf" }
+                                                val file = File(folder, safeName)
+                                                backend.downloadDrivePdf(pdf.id, selectedDriveModule!!.id, file)
+                                                localDownloads = (listOf(file) + localDownloads.filterNot { it.absolutePath == file.absolutePath }).take(30)
+                                                val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+                                                context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                                            }
+                                        }) { Text("Open PDF") }
+                                    }
+                                }
                             }
                         }
                     }
@@ -438,6 +486,66 @@ fun HubApp(backend: Backend, callback: Pair<String, String>?, clearCallback: () 
                 "admin" -> if (!demo && profile?.role == "admin") { AdminPanel(backend) { go("home") } } else { Text("Administrator access required.") }
             }
             Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+private fun cleanDrivePdfTitle(fileName: String, moduleName: String): String {
+    var title = fileName.substringBeforeLast('.', fileName)
+    if (moduleName.isNotBlank()) title = title.replace(Regex("^\\s*${Regex.escape(moduleName)}[ _.-]*", RegexOption.IGNORE_CASE), "")
+    title = title.replace(Regex("(?i)\\b(TL|TUT(?:ORIAL)?[ _-]*LETTER)[ _-]*0*(\\d+)\\b"), "Tutorial Letter $2")
+        .replace(Regex("(?i)\\b(SG|STUDY[ _-]*GUIDE)\\b"), "Study Guide")
+        .replace(Regex("(?i)\\b(ASSIGNMENT|ASSIGN|A)[ _-]*0*(\\d+)\\b"), "Assignment $2")
+        .replace(Regex("(?i)\\b(POE|PORTFOLIO[ _-]*OF[ _-]*EVIDENCE)\\b"), "Portfolio of Evidence")
+        .replace(Regex("(?i)\\b(EXAM|EXAMINATION)[ _-]*(PAPER)?\\b"), "Examination Paper")
+        .replace(Regex("(?i)\\b(FINAL|UPDATED|COPY|VERSION|V)\\b"), " ")
+        .replace(Regex("[_\\-.]+"), " ")
+        .replace(Regex("\\s+"), " ").trim()
+    return title.ifBlank { fileName }
+}
+private fun drivePdfCategory(fileName: String): String {
+    val name = fileName.lowercase()
+    return when {
+        Regex("\\b(tl|tutorial|tut)[ _-]*letter\\b|\\btl[ _-]*0*\\d+").containsMatchIn(name) -> "Tutorial letter"
+        ("study" in name && "guide" in name) || Regex("\\bsg\\b").containsMatchIn(name) -> "Study guide"
+        "assign" in name || Regex("\\ba[ _-]*0*\\d+\\b").containsMatchIn(name) -> "Assignment"
+        "exam" in name || "examination" in name -> "Examination"
+        "poe" in name || "portfolio" in name -> "Portfolio"
+        else -> "Study material"
+    }
+}
+@Composable
+private fun DrivePdfPreviewThumbnail(pdf: DriveFolderPdf, folderId: String, backend: Backend, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val preview by produceState<Bitmap?>(initialValue = null, key1 = pdf.id, key2 = folderId) {
+        value = withContext(Dispatchers.IO) {
+            try {
+                val cache = File(context.cacheDir, "pdf-previews").apply { mkdirs() }
+                val safeId = pdf.id.hashCode().toUInt().toString()
+                val file = File(cache, "$safeId.pdf")
+                if (!file.exists() || file.length() == 0L) backend.downloadDrivePdf(pdf.id, folderId, file)
+                ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
+                    PdfRenderer(descriptor).use { renderer ->
+                        if (renderer.pageCount == 0) null else renderer.openPage(0).use { page ->
+                            val width = 420
+                            val height = (width * page.height.toFloat() / page.width).toInt().coerceAtLeast(1)
+                            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
+                                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) { null }
+        }
+    }
+    if (preview != null) {
+        Image(bitmap=preview!!.asImageBitmap(), contentDescription="First page preview of ${cleanDrivePdfTitle(pdf.name, "")}", modifier=modifier, contentScale=ContentScale.Fit)
+    } else {
+        Box(modifier.background(Color(0xFFE8EEF8), RoundedCornerShape(10.dp)), contentAlignment=Alignment.Center) {
+            Column(horizontalAlignment=Alignment.CenterHorizontally, verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                Text("PDF", color=Blue, fontWeight=FontWeight.Bold)
+                Text("Preview", color=Muted, style=MaterialTheme.typography.labelSmall)
+            }
         }
     }
 }
